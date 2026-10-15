@@ -273,7 +273,7 @@ def newsletter_signup():
     if len(email) > 254 or not re.fullmatch(r"[^\s@]+@[^\s@]+\.[^\s@]+", email):
         return jsonify({"error": "Enter a valid email address."}), 400
     if not consent:
-        return jsonify({"error": "Please confirm you agree to receive Takeoff fare updates."}), 400
+        return jsonify({"error": "Please confirm you agree to receive GetOffDeals fare updates."}), 400
     try:
         with db_connect() as conn:
             conn.execute("INSERT INTO subscribers (email, consent) VALUES (?, 1) ON CONFLICT(email) DO UPDATE SET consent=1", (email,))
