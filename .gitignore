@@ -1,0 +1,9 @@
+.env
+.venv/
+__pycache__/
+*.py[cod]
+takeoff.sqlite3
+takeoff.sqlite3-shm
+takeoff.sqlite3-wal
+.pytest_cache/
+.DS_Store

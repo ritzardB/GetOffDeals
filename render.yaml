@@ -1,0 +1,15 @@
+services:
+  - type: web
+    name: getoffdeals
+    runtime: python
+    plan: free
+    buildCommand: pip install -r requirements.txt
+    startCommand: gunicorn app:app --bind 0.0.0.0:$PORT
+    healthCheckPath: /
+    envVars:
+      - key: FLASK_DEBUG
+        value: "false"
+      - key: DEFAULT_ORIGIN
+        value: AUH
+      - key: AMADEUS_BASE_URL
+        value: https://test.api.amadeus.com
