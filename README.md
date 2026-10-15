@@ -1,4 +1,4 @@
-# Takeoff — Flight Deals MVP
+# GetOffDeals — Flight Deals MVP
 
 A Flask website prototype aimed at Filipino travellers in the UAE and the Philippines. It combines destination inspiration, optional Amadeus flight search, a locally stored email-signup list, and a configurable affiliate booking hand-off.
 
