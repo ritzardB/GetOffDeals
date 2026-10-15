@@ -1,0 +1,222 @@
+"""GetOffDeals: Filipino-focused flight deals MVP.
+
+Demo fares are inspiration only. Live search requires Amadeus credentials.
+Affiliate redirects are enabled only when AFFILIATE_SEARCH_URL_TEMPLATE is configured
+with an approved partner's documented deep-link format.
+"""
+import os
+import re
+import sqlite3
+from datetime import date
+from urllib.parse import quote
+from flask import Flask, jsonify, render_template, request, redirect, abort
+import requests
+from dotenv import load_dotenv
+
+load_dotenv()
+app = Flask(__name__)
+app.config["JSON_SORT_KEYS"] = False
+DB_PATH = os.getenv("TAKEOFF_DB_PATH", os.path.join(os.path.dirname(__file__), "takeoff.sqlite3"))
+
+# Illustrative inspiration prices only; never present these as live promotions.
+DEMO_DEALS = [
+    {"destination":"Manila, Philippines","code":"MNL","price":1299,"currency":"AED","tag":"Homecoming","emoji":"🇵🇭","days":"Flexible stays","note":"Reconnect with family, food and the places that feel like home.","category":"homecoming","origin":"AUH"},
+    {"destination":"Cebu, Philippines","code":"CEB","price":1499,"currency":"AED","tag":"Island time","emoji":"🌴","days":"5–8 nights","note":"Island hopping, clear water and a slower pace in the Visayas.","category":"nature","origin":"AUH"},
+    {"destination":"Clark, Philippines","code":"CRK","price":1399,"currency":"AED","tag":"Northern Luzon","emoji":"⛰️","days":"Flexible stays","note":"A useful gateway for Central Luzon and trips beyond the capital.","category":"homecoming","origin":"DXB"},
+    {"destination":"Kalibo, Philippines","code":"KLO","price":1599,"currency":"AED","tag":"Beach escape","emoji":"🏝️","days":"4–7 nights","note":"A gateway for exploring Aklan and nearby island destinations.","category":"nature","origin":"AUH"},
+    {"destination":"Istanbul, Türkiye","code":"IST","price":1099,"currency":"AED","tag":"City break","emoji":"🕌","days":"4–6 nights","note":"Historic streets, waterfront views and lively markets.","category":"city","origin":"AUH"},
+    {"destination":"Tbilisi, Georgia","code":"TBS","price":699,"currency":"AED","tag":"Mountain air","emoji":"🏔️","days":"4–6 nights","note":"Old-town cafés, mountain views and a change of scenery.","category":"nature","origin":"AUH"},
+]
+
+
+def db_connect():
+    conn = sqlite3.connect(DB_PATH)
+    conn.row_factory = sqlite3.Row
+    return conn
+
+
+def init_db():
+    with db_connect() as conn:
+        conn.execute("""CREATE TABLE IF NOT EXISTS subscribers (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            email TEXT NOT NULL UNIQUE COLLATE NOCASE,
+            consent INTEGER NOT NULL DEFAULT 0,
+            created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+        )""")
+        conn.execute("""CREATE TABLE IF NOT EXISTS affiliate_clicks (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            origin TEXT NOT NULL, destination TEXT NOT NULL,
+            departure TEXT, return_date TEXT, adults INTEGER NOT NULL,
+            created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+        )""")
+
+
+init_db()
+
+
+def amadeus_token():
+    key, secret = os.getenv("AMA_API_KEY"), os.getenv("AMA_API_SECRET")
+    if not key or not secret:
+        return None
+    base = os.getenv("AMADEUS_BASE_URL", "https://test.api.amadeus.com").rstrip("/")
+    response = requests.post(
+        f"{base}/v1/security/oauth2/token",
+        data={"grant_type": "client_credentials", "client_id": key, "client_secret": secret},
+        headers={"Content-Type": "application/x-www-form-urlencoded"}, timeout=15,
+    )
+    response.raise_for_status()
+    return response.json()["access_token"]
+
+
+def partner_search_url(origin, destination, departure="", return_date="", adults=1):
+    """Use only a partner-approved URL template configured by the site operator."""
+    template = os.getenv("AFFILIATE_SEARCH_URL_TEMPLATE", "").strip()
+    if not template:
+        return None
+    values = {
+        "origin": quote(origin), "destination": quote(destination),
+        "departure": quote(departure), "return_date": quote(return_date),
+        "adults": str(adults),
+    }
+    try:
+        url = template.format(**values)
+    except (KeyError, ValueError):
+        app.logger.error("Affiliate URL template has invalid placeholders")
+        return None
+    if not url.startswith("https://"):
+        app.logger.error("Affiliate URL template must produce an HTTPS URL")
+        return None
+    return url
+
+
+@app.after_request
+def security_headers(response):
+    response.headers.setdefault("X-Content-Type-Options", "nosniff")
+    response.headers.setdefault("Referrer-Policy", "strict-origin-when-cross-origin")
+    response.headers.setdefault("X-Frame-Options", "DENY")
+    return response
+
+
+@app.get("/")
+def home():
+    return render_template("index.html", origin=os.getenv("DEFAULT_ORIGIN", "AUH"))
+
+
+@app.get("/api/deals")
+def deals():
+    result = []
+    for deal in DEMO_DEALS:
+        item = dict(deal)
+        item["partnerConfigured"] = bool(os.getenv("AFFILIATE_SEARCH_URL_TEMPLATE", "").strip())
+        result.append(item)
+    return jsonify({"source": "demo", "notice": "Illustrative sample fares, not live or bookable prices.", "deals": result})
+
+
+@app.get("/api/search")
+def search_flights():
+    origin = request.args.get("origin", os.getenv("DEFAULT_ORIGIN", "AUH")).strip().upper()
+    destination = request.args.get("destination", "").strip().upper()
+    departure = request.args.get("departure", "").strip()
+    return_date = request.args.get("return", "").strip()
+    try:
+        if not re.fullmatch(r"[A-Z]{3}", origin) or not re.fullmatch(r"[A-Z]{3}", destination):
+            raise ValueError
+        dep = date.fromisoformat(departure)
+        if dep < date.today():
+            return jsonify({"error": "Departure date must be today or later."}), 400
+        if return_date:
+            ret = date.fromisoformat(return_date)
+            if ret <= dep:
+                return jsonify({"error": "Return date must be after departure."}), 400
+        adults = int(request.args.get("adults", "1"))
+        if not 1 <= adults <= 9:
+            raise ValueError
+    except (ValueError, TypeError):
+        return jsonify({"error": "Check the three-letter airport codes, dates and passenger count."}), 400
+
+    if not os.getenv("AMA_API_KEY") or not os.getenv("AMA_API_SECRET"):
+        return jsonify({"error": "Live search is not configured. Add Amadeus API credentials to .env. You can still browse destination inspiration below."}), 503
+    try:
+        token = amadeus_token()
+        base = os.getenv("AMADEUS_BASE_URL", "https://test.api.amadeus.com").rstrip("/")
+        params = {"originLocationCode": origin, "destinationLocationCode": destination,
+                  "departureDate": departure, "adults": adults, "currencyCode": "AED", "max": 10}
+        if return_date:
+            params["returnDate"] = return_date
+        response = requests.get(f"{base}/v2/shopping/flight-offers",
+                                headers={"Authorization": f"Bearer {token}"}, params=params, timeout=25)
+        if response.status_code >= 400:
+            app.logger.warning("Amadeus search returned HTTP %s", response.status_code)
+        response.raise_for_status()
+        payload = response.json()
+        results = []
+        for offer in payload.get("data", []):
+            itineraries = offer.get("itineraries", [])
+            itinerary = itineraries[0] if itineraries else {}
+            segments = itinerary.get("segments", [])
+            if not segments:
+                continue
+            price = float(offer.get("price", {}).get("grandTotal", 0))
+            if price <= 0:
+                continue
+            results.append({
+                "price": price, "currency": offer.get("price", {}).get("currency", "AED"),
+                "origin": segments[0].get("departure", {}).get("iataCode", origin),
+                "destination": segments[-1].get("arrival", {}).get("iataCode", destination),
+                "departure": segments[0].get("departure", {}).get("at", ""),
+                "arrival": segments[-1].get("arrival", {}).get("at", ""),
+                "stops": max(0, len(segments) - 1), "duration": itinerary.get("duration", ""),
+                "bookingUrl": partner_search_url(origin, destination, departure, return_date, adults),
+            })
+        results.sort(key=lambda item: item["price"])
+        return jsonify({"source": "Amadeus", "results": results,
+                        "notice": "Provider prices can change. Confirm baggage, fees, availability and final price before booking."})
+    except requests.RequestException:
+        app.logger.exception("Flight provider request failed")
+        return jsonify({"error": "Flight provider request failed. Check API access and try again."}), 502
+    except (KeyError, ValueError, TypeError):
+        app.logger.exception("Could not parse flight provider response")
+        return jsonify({"error": "The flight provider returned an unexpected response."}), 502
+
+
+@app.post("/api/newsletter")
+def newsletter_signup():
+    payload = request.get_json(silent=True) or request.form
+    email = str(payload.get("email", "")).strip().lower()
+    consent = payload.get("consent") in (True, "true", "on", "1", 1)
+    if len(email) > 254 or not re.fullmatch(r"[^\s@]+@[^\s@]+\.[^\s@]+", email):
+        return jsonify({"error": "Enter a valid email address."}), 400
+    if not consent:
+        return jsonify({"error": "Please confirm you agree to receive Takeoff fare updates."}), 400
+    try:
+        with db_connect() as conn:
+            conn.execute("INSERT INTO subscribers (email, consent) VALUES (?, 1) ON CONFLICT(email) DO UPDATE SET consent=1", (email,))
+    except sqlite3.Error:
+        app.logger.exception("Could not save newsletter subscription")
+        return jsonify({"error": "Signup could not be saved right now. Please try again later."}), 500
+    return jsonify({"message": "You're on the list! Email delivery is not connected yet, but your signup has been saved."}), 201
+
+
+@app.get("/go/search")
+def affiliate_search():
+    origin = request.args.get("origin", os.getenv("DEFAULT_ORIGIN", "AUH")).strip().upper()
+    destination = request.args.get("destination", "").strip().upper()
+    departure = request.args.get("departure", "").strip()
+    return_date = request.args.get("return", "").strip()
+    try:
+        adults = int(request.args.get("adults", "1"))
+    except ValueError:
+        abort(400)
+    if not re.fullmatch(r"[A-Z]{3}", origin) or not re.fullmatch(r"[A-Z]{3}", destination) or not 1 <= adults <= 9:
+        abort(400)
+    url = partner_search_url(origin, destination, departure, return_date, adults)
+    if not url:
+        return jsonify({"error": "Affiliate booking is not configured yet. Connect an approved partner and add its documented URL template to .env."}), 503
+    with db_connect() as conn:
+        conn.execute("INSERT INTO affiliate_clicks (origin, destination, departure, return_date, adults) VALUES (?, ?, ?, ?, ?)",
+                     (origin, destination, departure or None, return_date or None, adults))
+    return redirect(url, code=302)
+
+
+if __name__ == "__main__":
+    app.run(debug=os.getenv("FLASK_DEBUG", "false").lower() == "true", port=int(os.getenv("PORT", "5000")))
