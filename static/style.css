@@ -7,3 +7,93 @@
 .result-price .deal-link{display:block;margin-top:8px;font-size:12px;white-space:nowrap}
 .search-disclaimer{font-size:12px;line-height:1.55;color:#6d7780}
 @media(max-width:640px){.consent-row{font-size:11px}.result-price .deal-link{white-space:normal}}
+
+
+/* Trust and transparency pages */
+.info-header {
+  border-bottom: 1px solid #e7eaf0;
+  background: #fff;
+}
+.info-header-inner {
+  min-height: 72px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 20px;
+}
+.info-brand {
+  color: #15233b;
+  font-size: 1.25rem;
+  font-weight: 800;
+  text-decoration: none;
+}
+.info-home,
+.info-footer a {
+  color: #3659a8;
+  text-decoration: none;
+}
+.info-main {
+  max-width: 850px;
+  padding-top: 48px;
+  padding-bottom: 64px;
+}
+.info-eyebrow {
+  color: #3659a8;
+  font-size: .78rem;
+  font-weight: 800;
+  letter-spacing: .12em;
+}
+.info-main h1 {
+  margin: 12px 0;
+  color: #15233b;
+  font-size: clamp(2rem, 5vw, 3.25rem);
+  line-height: 1.1;
+}
+.info-updated {
+  color: #687386;
+  font-size: .9rem;
+  margin-bottom: 36px;
+}
+.info-section {
+  padding: 22px 0;
+  border-bottom: 1px solid #e7eaf0;
+}
+.info-section h2 {
+  color: #15233b;
+  font-size: 1.2rem;
+  margin: 0 0 10px;
+}
+.info-section p,
+.info-contact {
+  color: #455168;
+  line-height: 1.8;
+}
+.info-contact a {
+  color: #3659a8;
+}
+.info-footer {
+  padding: 24px 0;
+  border-top: 1px solid #e7eaf0;
+}
+.info-footer .container,
+.trust-links {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 14px 22px;
+}
+.trust-links {
+  margin-top: 14px;
+}
+.trust-links a {
+  font-size: .88rem;
+  color: inherit;
+}
+@media (max-width: 600px) {
+  .info-header-inner {
+    min-height: 62px;
+  }
+  .info-main {
+    padding-top: 32px;
+    padding-bottom: 44px;
+  }
+}

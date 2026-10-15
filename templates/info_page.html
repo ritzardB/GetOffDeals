@@ -1,0 +1,40 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{{ title }} | GetOffDeals</title>
+  <meta name="description" content="{{ page_heading }} - GetOffDeals travel information.">
+  <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+  <header class="info-header">
+    <div class="container info-header-inner">
+      <a class="info-brand" href="/">GetOffDeals</a>
+      <a class="info-home" href="/">Back to deals</a>
+    </div>
+  </header>
+  <main class="container info-main">
+    <p class="info-eyebrow">GETOFFDEALS · TRAVEL WITH CLARITY</p>
+    <h1>{{ page_heading }}</h1>
+    <p class="info-updated">Last updated: {{ updated }}</p>
+    {% for heading, paragraph in content %}
+      <section class="info-section">
+        <h2>{{ heading }}</h2>
+        <p>{{ paragraph }}</p>
+      </section>
+    {% endfor %}
+    <p class="info-contact">Contact: <a href="mailto:inforichapps@gmail.com">inforichapps@gmail.com</a></p>
+  </main>
+  <footer class="info-footer">
+    <div class="container">
+      <a href="/">Home</a>
+      <a href="/about">About</a>
+      <a href="/contact">Contact</a>
+      <a href="/privacy">Privacy Policy</a>
+      <a href="/terms">Terms of Use</a>
+      <a href="/affiliate-disclosure">Affiliate Disclosure</a>
+    </div>
+  </footer>
+</body>
+</html>
