@@ -392,6 +392,9 @@ def home():
         origin=os.getenv("DEFAULT_ORIGIN", "AUH"),
     )
 
+@app.get("/flights")
+def flights():
+    return render_template("flights.html")
 
 # Trust and transparency pages
 @app.get("/about")
