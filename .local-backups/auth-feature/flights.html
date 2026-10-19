@@ -1,0 +1,164 @@
+
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#101b2b">
+  <meta name="description" content="Search flights with GetOffDeals.">
+  <title>Search Flights | GetOffDeals</title>
+
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=Manrope:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet"
+        href="{{ url_for('static', filename='style.css') }}">
+
+  <style>
+    .tpwl-page {
+      min-height: 65vh;
+      padding: 48px 0 72px;
+      background: #f7f8f5;
+    }
+
+    .tpwl-intro { margin-bottom: 28px; }
+
+    .tpwl-intro h1 {
+      margin: 10px 0;
+      font: 800 clamp(2rem, 5vw, 3.25rem)/1.1 Manrope, sans-serif;
+      color: #101b2b;
+    }
+
+    .tpwl-intro p {
+      max-width: 700px;
+      color: #536071;
+      line-height: 1.7;
+    }
+
+    .tpwl-widget-shell {
+      background: #fff;
+      border: 1px solid #e1e6e2;
+      border-radius: 20px;
+      padding: clamp(16px, 3vw, 32px);
+      min-height: 180px;
+      box-shadow: 0 18px 50px rgba(16,27,43,.06);
+    }
+
+    #tpwl-search {
+      width: 100%;
+      min-width: 0;
+    }
+
+    .tpwl-back {
+      display: inline-block;
+      margin-bottom: 18px;
+      color: #101b2b;
+      font-weight: 700;
+      text-decoration: none;
+    }
+
+    @media (max-width: 600px) {
+      .tpwl-page { padding: 32px 0 48px; }
+    }
+  </style>
+
+  <script>
+    (function () {
+      window.TPWL_CONFIGURATION = {
+        ...window.TPWL_CONFIGURATION,
+        resultsURL: "https://getoffdeals.onrender.com/flights"
+      };
+
+      var script = document.createElement("script");
+      script.async = true;
+      script.type = "module";
+      script.src =
+        "https://tpwgts.com/wl_web/main.js?wl_id=23501";
+      document.head.appendChild(script);
+    })();
+  </script>
+</head>
+
+<body>
+  <header class="nav-wrap">
+    <nav class="nav container">
+      <a class="brand" href="/">
+        <span class="brand-mark">↗</span>
+        GetOffDeals <span class="brand-dot">.</span>
+      </a>
+
+      <div class="nav-links">
+        <a href="/">Home</a>
+        <a href="/#deals">Explore deals</a>
+        <a href="/about">About</a>
+      </div>
+
+      <a class="nav-cta" href="/">Back to home <span>↗</span></a>
+
+      <button class="menu-toggle"
+              aria-label="Toggle navigation"
+              aria-expanded="false">☰</button>
+    </nav>
+  </header>
+
+  <main class="tpwl-page">
+    <div class="container">
+      <a class="tpwl-back" href="/">← Back to GetOffDeals</a>
+
+      <div class="tpwl-intro">
+        <span class="eyebrow dark-eyebrow">
+          YOUR NEXT TRIP STARTS HERE
+        </span>
+        <h1>Find your next flight.</h1>
+        <p>
+          Search travel options with our flight-search partner.
+          Fares and availability can change. Confirm the final price,
+          baggage rules and booking conditions with the provider.
+        </p>
+      </div>
+
+      <section class="tpwl-widget-shell" aria-label="Flight search">
+        <div id="tpwl-search"></div>
+        <div id="tpwl-tickets"></div>
+        <noscript>
+          Please enable JavaScript to use the flight search.
+        </noscript>
+      </section>
+    </div>
+  </main>
+
+  <footer class="footer">
+    <div class="container footer-inner">
+      <a class="brand footer-brand" href="/">
+        <span class="brand-mark">↗</span>
+        GetOffDeals<span class="brand-dot">.</span>
+      </a>
+      <span>UAE ↔ Philippines · Travel further. Stay curious.</span>
+      <span>© <span id="year"></span> GETOFFDEALS</span>
+    </div>
+
+    <div class="trust-links">
+      <a href="/about">About</a>
+      <a href="/contact">Contact</a>
+      <a href="/privacy">Privacy Policy</a>
+      <a href="/terms">Terms of Use</a>
+      <a href="/affiliate-disclosure">Affiliate Disclosure</a>
+    </div>
+  </footer>
+
+  <script>
+    document.getElementById("year").textContent =
+      new Date().getFullYear();
+
+    var menuButton = document.querySelector(".menu-toggle");
+
+    if (menuButton) {
+      menuButton.addEventListener("click", function () {
+        var links = document.querySelector(".nav-links");
+        var open = links.classList.toggle("mobile-open");
+        menuButton.setAttribute("aria-expanded", String(open));
+      });
+    }
+  </script>
+</body>
+</html>
