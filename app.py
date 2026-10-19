@@ -23,6 +23,14 @@ load_dotenv()
 app = Flask(__name__)
 app.config["JSON_SORT_KEYS"] = False
 
+# Secure server-side authentication session configuration.
+app.config["SECRET_KEY"] = os.getenv("FLASK_SECRET_KEY")
+app.config["SESSION_COOKIE_HTTPONLY"] = True
+app.config["SESSION_COOKIE_SAMESITE"] = "Lax"
+app.config["SESSION_COOKIE_SECURE"] = (
+    os.getenv("COOKIE_SECURE", "").lower() == "true"
+)
+
 DB_PATH = os.getenv(
     "TAKEOFF_DB_PATH",
     os.path.join(os.path.dirname(__file__), "takeoff.sqlite3"),
@@ -260,6 +268,71 @@ def fetch_travelpayouts_deals():
         )
 
     return deals
+
+
+
+def supabase_auth_config():
+    """Return validated Supabase Auth configuration and request headers."""
+    from urllib.parse import urlparse
+
+    base_url = os.getenv("SUPABASE_URL", "").strip().rstrip("/")
+    publishable_key = os.getenv("SUPABASE_PUBLISHABLE_KEY", "").strip()
+
+    parsed_url = urlparse(base_url)
+    if (
+        parsed_url.scheme != "https"
+        or not parsed_url.hostname
+        or not parsed_url.hostname.endswith(".supabase.co")
+        or parsed_url.path
+        or parsed_url.query
+        or parsed_url.fragment
+        or not publishable_key.startswith("sb_publishable_")
+    ):
+        raise RuntimeError("Supabase Auth configuration is invalid")
+
+    return base_url, {
+        "apikey": publishable_key,
+        "Content-Type": "application/json",
+    }
+
+
+def supabase_auth_request(endpoint, payload=None, method="POST"):
+    """Call Supabase Auth without exposing credentials or response secrets."""
+    base_url, headers = supabase_auth_config()
+    url = f"{base_url}/auth/v1/{endpoint.lstrip('/')}"
+
+    try:
+        response = requests.request(
+            method,
+            url,
+            headers=headers,
+            json=payload,
+            timeout=(5, 15),
+            allow_redirects=False,
+        )
+    except requests.RequestException:
+        app.logger.warning("Supabase Auth request failed to connect")
+        return None, "Supabase Auth is temporarily unavailable."
+
+    if 300 <= response.status_code < 400:
+        app.logger.warning("Supabase Auth returned an unexpected redirect")
+        return None, "Supabase Auth returned an unexpected response."
+
+    try:
+        data = response.json()
+    except ValueError:
+        data = {}
+
+    if not response.ok:
+        message = data.get("msg") or data.get("message")
+        if response.status_code in (400, 401, 422) and isinstance(message, str):
+            return None, message[:200]
+        return None, "Supabase Auth could not complete the request."
+
+    if not isinstance(data, dict):
+        return None, "Supabase Auth returned an unexpected response."
+
+    return data, None
 
 
 def db_connect():
