@@ -44,12 +44,24 @@ async function submitAuthForm(form, endpoint) {
     status.textContent = data.message || "Request completed.";
     status.classList.add("success");
 
-    if (endpoint === "/auth/login") {
-    sessionStorage.setItem("getoffdeals_show_welcome", "1");
-    window.location.assign("/");
-  } else {
-    form.reset();
+    
+if (endpoint === "/auth/login") {
+  sessionStorage.setItem("getoffdeals_show_welcome", "1");
+  window.location.assign("/");
+} else {
+  form.reset();
+
+  // Allow the user to read the email verification message.
+  button.disabled = true;
+  button.textContent = "Registration successful";
+
+  setTimeout(() => {
+    window.location.assign("/login");
+  }, 2500);
+
+  return;
 }
+
   } catch (error) {
     status.textContent = error.message || "Unable to connect. Please try again.";
     status.classList.add("error");
