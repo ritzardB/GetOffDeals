@@ -15,8 +15,12 @@ from urllib.parse import quote
 
 import requests
 from dotenv import load_dotenv
-from flask import Flask, abort, jsonify, redirect, render_template, request
+from flask import Flask, abort, jsonify, redirect, render_template, request, session
 
+from getoffdeals.postgres_sessions import (
+    PostgresSessionInterface,
+    regenerate_session_id,
+)
 
 load_dotenv()
 
@@ -30,6 +34,9 @@ app.config["SESSION_COOKIE_SAMESITE"] = "Lax"
 app.config["SESSION_COOKIE_SECURE"] = (
     os.getenv("COOKIE_SECURE", "").lower() == "true"
 )
+
+# Store session contents in PostgreSQL; the browser cookie holds only a random ID.
+app.session_interface = PostgresSessionInterface()
 
 DB_PATH = os.getenv(
     "TAKEOFF_DB_PATH",
@@ -324,15 +331,187 @@ def supabase_auth_request(endpoint, payload=None, method="POST"):
         data = {}
 
     if not response.ok:
-        message = data.get("msg") or data.get("message")
-        if response.status_code in (400, 401, 422) and isinstance(message, str):
-            return None, message[:200]
+        if response.status_code in (400, 401, 422):
+            return None, "Unable to authenticate. Check your details or verify your email."
         return None, "Supabase Auth could not complete the request."
 
     if not isinstance(data, dict):
         return None, "Supabase Auth returned an unexpected response."
 
     return data, None
+
+@app.post("/auth/register")
+def auth_register():
+    """Register an account through Supabase; require email verification."""
+    if not request.is_json:
+        return jsonify(error="Send a JSON request."), 400
+
+    body = request.get_json(silent=True)
+    if not isinstance(body, dict):
+        return jsonify(error="Invalid request body."), 400
+
+
+    email = body.get("email")
+    password = body.get("password")
+    first_name = body.get("first_name")
+    last_name = body.get("last_name", "")
+
+    if not isinstance(email, str) or not isinstance(password, str):
+        return jsonify(error="Email and password are required."), 400
+
+    if not isinstance(first_name, str) or not isinstance(last_name, str):
+        return jsonify(error="Enter a valid name."), 400
+
+    email = email.strip().lower()
+    first_name = first_name.strip()
+    last_name = last_name.strip()
+
+    if not first_name or len(first_name) > 80 or len(last_name) > 80:
+        return jsonify(error="Enter a valid first and last name."), 400
+
+    if (
+        len(email) > 254
+        or not re.fullmatch(r"[^\s@]+@[^\s@]+\.[^\s@]+", email)
+    ):
+        return jsonify(error="Enter a valid email address."), 400
+
+    if len(password) < 8 or len(password) > 128:
+        return jsonify(error="Password must be between 8 and 128 characters."), 400
+
+    if not isinstance(email, str) or not isinstance(password, str):
+        return jsonify(error="Email and password are required."), 400
+
+    email = email.strip().lower()
+    if (
+        len(email) > 254
+        or not re.fullmatch(r"[^\s@]+@[^\s@]+\.[^\s@]+", email)
+    ):
+        return jsonify(error="Enter a valid email address."), 400
+
+    if len(password) < 8 or len(password) > 128:
+        return jsonify(error="Password must be between 8 and 128 characters."), 400
+
+    try:
+        data, error = supabase_auth_request(
+            "signup",
+            payload={
+                "email": email,
+                "password": password,
+                "data": {
+                    "first_name": first_name,
+                    "last_name": last_name,
+                },
+            }
+        )
+    except RuntimeError:
+        app.logger.error("Supabase Auth configuration is invalid")
+        return jsonify(error="Registration is temporarily unavailable."), 503
+
+    if error:
+        return jsonify(error=error), 400
+
+    # Never establish a logged-in session during registration.
+    # Supabase email confirmation must happen first.
+    return jsonify(
+        message=(
+            "If registration was accepted, check your email for a "
+            "verification link before signing in."
+        )
+    ), 202
+
+@app.post("/auth/login")
+def auth_login():
+    """Authenticate through Supabase and establish a server-side session."""
+
+    if not request.is_json:
+        return jsonify(error="Send a JSON request."), 400
+
+    body = request.get_json(silent=True)
+    if not isinstance(body, dict):
+        return jsonify(error="Invalid request body."), 400
+
+    email = body.get("email")
+    password = body.get("password")
+
+    if not isinstance(email, str) or not isinstance(password, str):
+        return jsonify(error="Email and password are required."), 400
+
+    email = email.strip().lower()
+    if (
+        len(email) > 254
+        or not re.fullmatch(r"[^\s@]+@[^\s@]+\.[^\s@]+", email)
+        or not password
+        or len(password) > 128
+    ):
+        return jsonify(error="Invalid email or password."), 400
+
+    try:
+        data, error = supabase_auth_request(
+            "token?grant_type=password",
+            payload={"email": email, "password": password},
+        )
+    except RuntimeError:
+        app.logger.error("Supabase Auth configuration is invalid")
+        return jsonify(error="Login is temporarily unavailable."), 503
+
+    if error or not isinstance(data, dict):
+        return jsonify(error="Invalid credentials or unverified email."), 401
+
+    user = data.get("user")
+    if not isinstance(user, dict) or not user.get("id"):
+        return jsonify(error="Unable to authenticate this account."), 401
+
+    if not (user.get("email_confirmed_at") or user.get("confirmed_at")):
+        return jsonify(error="Please verify your email before signing in."), 403
+
+    # Rotate the session ID to prevent session fixation.
+    try:
+        regenerate_session_id(session)
+    except Exception:
+        app.logger.exception("Could not rotate the login session")
+        return jsonify(error="Login is temporarily unavailable."), 503
+
+    session.clear()
+
+    session["user_id"] = user["id"]
+    session["email"] = user.get("email", email)
+
+    user_metadata = user.get("user_metadata")
+    if not isinstance(user_metadata, dict):
+        user_metadata = {}
+
+    session["first_name"] = (
+        user_metadata.get("first_name", "").strip()
+        if isinstance(user_metadata.get("first_name"), str)
+        else ""
+    )
+    session["last_name"] = (
+        user_metadata.get("last_name", "").strip()
+        if isinstance(user_metadata.get("last_name"), str)
+        else ""
+    )
+
+
+    return jsonify(
+        message="Login successful.",
+        user={
+            "id": session["user_id"],
+            "email": session["email"],
+        }
+    ), 200
+
+
+@app.post("/auth/logout")
+def auth_logout():
+    """Clear the session and redirect browser users home."""
+    session.clear()
+
+    # Regular browser form submissions should return to the homepage.
+    if "text/html" in request.headers.get("Accept", ""):
+        return redirect("/", code=303)
+
+    # Preserve the JSON response for API clients.
+    return jsonify(message="Logged out successfully."), 200
 
 
 def db_connect():
@@ -469,6 +648,21 @@ def home():
 def flights():
     return render_template("flights.html")
 
+
+@app.get("/login")
+def login_page():
+    if session.get("user_id"):
+        return redirect("/")
+    return render_template("login.html")
+
+
+@app.get("/register")
+def register_page():
+    if session.get("user_id"):
+        return redirect("/")
+    return render_template("register.html")
+
+
 # Trust and transparency pages
 @app.get("/about")
 def about():
@@ -530,7 +724,6 @@ def contact():
         ],
     )
 
-
 @app.get("/privacy")
 def privacy():
     return render_template(
@@ -580,7 +773,6 @@ def privacy():
             ),
         ],
     )
-
 
 @app.get("/terms")
 def terms():
