@@ -9,13 +9,48 @@
   <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
 </head>
 <body>
+
 <header class="nav-wrap">
   <nav class="nav container">
-    <a class="brand" href="#top"><span class="brand-mark">↗</span> GetOffDeals <span class="brand-dot">.</span></a><div class="nav-links"><a href="#deals">Explore deals</a><a href="#how">How it works</a></div>
-  <a class="nav-cta" href="/flights">Find a flight <span>↗</span>
-  </a><button class="menu-toggle" aria-label="Toggle navigation" aria-expanded="false">☰</button>
-</nav>
+    <a class="brand" href="#top" aria-label="GetOffDeals home">
+      <span class="brand-mark">↗</span>
+      GetOffDeals<span class="brand-dot">.</span>
+    </a>
+
+    {% if session.get('user_id') and session.get('first_name') %}
+      <span class="nav-greeting">
+        Hi, {{ session.get('first_name')|e }} 👋
+      </span>
+    {% endif %}
+
+    <div class="nav-links">
+      <a href="#deals">Explore deals</a>
+      <a href="#how">How it works</a>
+
+      {% if session.get('user_id') %}
+        <a href="#account">My Account</a>
+        <form action="/auth/logout" method="post" class="nav-logout-form">
+          <button type="submit" class="nav-logout">Sign out</button>
+        </form>
+      {% else %}
+        <a href="/login">Sign in</a>
+        <a href="/register">Create account</a>
+      {% endif %}
+    </div>
+
+    <a class="nav-cta" href="/flights">
+      Find a flight <span>↗</span>
+    </a>
+
+    <button
+      class="menu-toggle"
+      type="button"
+      aria-label="Toggle navigation"
+      aria-expanded="false"
+    >☰</button>
+  </nav>
 </header>
+
 <main id="top">
 <section class="hero">
   <div class="hero-glow"></div>
@@ -27,7 +62,8 @@
         <h1>Your next<br>great escape<br><em>costs less.</em>
         </h1>
         <p class="hero-sub">Flight inspiration for Filipinos flying between the UAE and the Philippines—plus city breaks and island escapes worth saving for.</p>
-        <div class="hero-actions"><a class="button button-lime" href="#deals">Explore flight deals <span>↘</span></a>
+        <div class="hero-actions">
+          <a class="button button-lime" href="#deals">Explore flight deals <span>↘</span></a>
           <div class="social-proof">
             <div class="avatar-stack">
             <i>✈</i>
@@ -50,26 +86,35 @@
               <span class="destination-kicker">YOUR NEXT PIN ON THE MAP</span>
               <strong>Somewhere<br>beautiful.</strong>
               <span class="route-line">AUH <b>──── ✈ ────</b> ?</span></div>
-              <div class="ticket-card">
-                <div class="ticket-top"><span>TAKEOFF / TRAVEL NOTE</span>
-                  <span>✳ 01</span>
+
+            <div class="ticket-card" id="rotating-ticket" data-theme="international">
+              <div class="ticket-top">
+                <span id="ticket-kicker">TAKEOFF / TRAVEL NOTE</span>
+                <span id="ticket-number">✳ 01</span>
+              </div>
+
+              <div class="ticket-main">
+                <div>
+                  <small id="ticket-origin-label">DEPARTING FROM</small>
+                  <b id="ticket-origin">{{ origin }}</b>
+                  <span id="ticket-origin-name">Abu Dhabi</span>
                 </div>
-                <div class="ticket-main">
-                  <div>
-                  <small>DEPARTING FROM</small>
-                  <b>{{ origin }}</b>
-                  <span>Abu Dhabi</span>
-                </div>
+
                 <div class="ticket-plane">✈</div>
-                <div><small>DESTINATION</small>
-                  <b>ANYWHERE</b>
-                  <span>Choose your mood</span>
-                </div></div>
-                <div class="ticket-bottom">
-                  <span>FIND YOUR FARE</span>
-                  <span>↗</span>
+
+                <div>
+                  <small id="ticket-destination-label">DESTINATION</small>
+                  <b id="ticket-destination">ANYWHERE</b>
+                  <span id="ticket-destination-note">Choose your mood</span>
                 </div>
               </div>
+
+              <div class="ticket-bottom">
+                <span id="ticket-footer">FIND YOUR FARE</span>
+                <span>↗</span>
+              </div>
+            </div>
+
               <span class="floating-stamp">GO<br>FAR.</span>
             </div>
           </div>
@@ -131,7 +176,54 @@
   <div class="section-heading"><div><span class="eyebrow dark-eyebrow">A LITTLE TRAVEL INSPIRATION</span><h2>Good deals. <em>Great stories.</em></h2><p class="section-sub">From trips home to Philippine island escapes and international getaways. Sample prices are illustrative—not live offers.</p></div><div class="deal-controls"><button class="filter active" data-filter="all">All picks</button><button class="filter" data-filter="city">City breaks</button><button class="filter" data-filter="nature">Nature & coast</button><button class="filter" data-filter="homecoming">Philippines</button></div></div><div id="deal-grid" class="deal-grid"><div class="loading-card">Finding your next adventure…</div></div><div class="disclaimer"><span>ⓘ</span><p><b>A quick note on fares</b><br>Sample deal prices are for design/demo purposes only. Actual prices, baggage, taxes, availability and booking terms are set by the airline or booking provider and can change at any time.</p></div></div></section>
 <section class="manifesto" id="how"><div class="container manifesto-grid"><div><span class="eyebrow">THE TAKEOFF WAY</span><h2>Spend less on<br>the ticket. <em>Live more<br>on the trip.</em></h2></div><div class="manifesto-right"><p>We believe travel should feel exciting before you even leave home. GetOffDeals brings fare inspiration and flight search together, so you can spend less time hunting and more time imagining.</p><div class="steps"><div class="step"><span>01</span><div><b>Find your spark</b><p>Browse destinations and discover a place worth going.</p></div></div><div class="step"><span>02</span><div><b>Compare the fare</b><p>Search available itineraries and check the details before booking.</p></div></div><div class="step"><span>03</span><div><b>Make it happen</b><p>Check final prices, baggage rules and terms with the airline or booking partner.</p></div></div></div></div></div></section>
 <section class="newsletter"><div class="container newsletter-inner"><div><span class="eyebrow">THE OCCASIONAL GOOD FIND</span><h2>Let the deals<br>come to you.</h2><p>Get occasional flight-deal inspiration for UAE–Philippines routes and international trips. You can unsubscribe at any time.</p></div><form id="newsletter-form" class="newsletter-form"><label for="email">YOUR EMAIL ADDRESS</label><div><input id="email" type="email" placeholder="you@example.com" autocomplete="email" required><button class="button button-lime" type="submit">Notify me ↗</button></div><label class="consent-row"><input id="newsletter-consent" type="checkbox" required><span>I agree to receive GetOffDeals flight-deal emails. I can unsubscribe at any time.</span></label><small id="newsletter-status">Signup is saved locally; email delivery will be connected in a later step.</small></form></div></section>
-</main><footer class="footer"><div class="container footer-inner"><a class="brand footer-brand" href="#top"><span class="brand-mark">↗</span> GetOffDeals<span class="brand-dot">.</span></a><span>UAE ↔ Philippines · Travel further. Stay curious.</span><span>© <span id="year"></span> GETOFFDEALS · BUILT FOR THE NEXT GETAWAY</span></div>
+</main>
+
+<!-- Welcome Modal block for logged-in users. 
+This modal is hidden by default and can be triggered to show a welcome message to returning users. 
+It includes a close button, 
+a welcome message that personalizes the greeting with the user's first name if available, 
+and a call-to-action button to explore deals. 
+The modal is designed to enhance user experience by providing a friendly and engaging interface for returning users. -->
+
+{% if session.get('user_id') %}
+<div
+  id="welcome-modal"
+  class="welcome-modal"
+  role="dialog"
+  aria-modal="true"
+  aria-labelledby="welcome-title"
+  aria-describedby="welcome-message"
+  aria-hidden="true"
+  hidden
+>
+  <div class="welcome-modal-card">
+    <button
+      type="button"
+      class="welcome-modal-close"
+      aria-label="Close welcome message"
+    >&times;</button>
+
+    <div class="welcome-modal-icon" aria-hidden="true">✈</div>
+    <p class="welcome-eyebrow">YOUR NEXT ADVENTURE STARTS HERE</p>
+
+    <h2 id="welcome-title">
+      Welcome back{% if session.get('first_name') %},
+      {{ session.get('first_name')|e }}{% endif %}!
+    </h2>
+
+    <p id="welcome-message">
+      We're glad you're here. Discover new destinations and find inspiration
+      for your next getaway.
+    </p>
+
+    <button type="button" class="button button-lime" id="welcome-explore">
+      Let's explore <span>↗</span>
+    </button>
+  </div>
+</div>
+{% endif %}
+
+<footer class="footer"><div class="container footer-inner"><a class="brand footer-brand" href="#top"><span class="brand-mark">↗</span> GetOffDeals<span class="brand-dot">.</span></a><span>UAE ↔ Philippines · Travel further. Stay curious.</span><span>© <span id="year"></span> GETOFFDEALS · BUILT FOR THE NEXT GETAWAY</span></div>
     <div class="trust-links">
       <a href="/about">About</a>
       <a href="/contact">Contact</a>

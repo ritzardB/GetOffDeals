@@ -138,3 +138,406 @@
     padding-bottom: 44px;
   }
 }
+
+
+/* Authentication pages */
+.auth-page {
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+}
+
+.auth-main {
+  flex: 1;
+  display: grid;
+  place-items: center;
+  padding-top: 48px;
+  padding-bottom: 48px;
+}
+
+.auth-card {
+  width: min(100%, 460px);
+  padding: clamp(24px, 5vw, 42px);
+  background: var(--white);
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  box-shadow: 0 20px 60px #101b2b0d;
+}
+
+.auth-eyebrow {
+  color: #657c32;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 1.6px;
+}
+
+.auth-card h1 {
+  margin: 14px 0 10px;
+  font: 800 clamp(30px, 6vw, 42px)/1.12 Manrope, sans-serif;
+  letter-spacing: -1.8px;
+}
+
+.auth-card h1 em {
+  color: #69852d;
+  font-style: normal;
+}
+
+.auth-intro {
+  margin: 0 0 28px;
+  color: var(--muted);
+  font-size: 13px;
+  line-height: 1.7;
+}
+
+.auth-card form {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.auth-card label {
+  margin-top: 8px;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.auth-card input {
+  width: 100%;
+  min-height: 46px;
+  padding: 12px 13px;
+  border: 1px solid #d8ddd5;
+  border-radius: 7px;
+  background: #fff;
+  color: var(--ink);
+  font: 14px 'DM Sans', sans-serif;
+}
+
+.auth-card input:focus {
+  outline: 2px solid #d7f36a;
+  outline-offset: 1px;
+}
+
+.auth-hint {
+  color: var(--muted);
+  font-size: 11px;
+}
+
+.auth-submit {
+  width: 100%;
+  min-height: 48px;
+  margin-top: 12px;
+}
+
+.auth-submit:disabled {
+  cursor: wait;
+  opacity: .65;
+}
+
+.auth-status {
+  min-height: 18px;
+  margin: 4px 0;
+  font-size: 12px;
+  line-height: 1.6;
+}
+
+.auth-status.error {
+  color: #b34431;
+}
+
+.auth-status.success {
+  color: #526b21;
+}
+
+.auth-switch {
+  margin-top: 20px;
+  font-size: 12px;
+  color: var(--muted);
+  text-align: center;
+}
+
+.auth-switch a {
+  color: #526b21;
+  font-weight: 700;
+  text-decoration: underline;
+}
+
+.auth-home {
+  display: block;
+  margin-top: 24px;
+  color: var(--muted);
+  font-size: 12px;
+  text-align: center;
+}
+
+
+
+/* Compact signed-in welcome banner */
+.welcome-banner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 12px 18px;
+  background: var(--paper);
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  color: var(--ink);
+}
+
+.welcome-banner h2 {
+  margin: 0;
+  font-size: 1.15rem;
+  line-height: 1.4;
+  color: var(--ink);
+}
+
+.welcome-banner p {
+  margin: 3px 0 0;
+  font-size: 0.82rem;
+  color: var(--muted);
+}
+
+.welcome-eyebrow {
+  display: none;
+}
+
+.welcome-status {
+  flex-shrink: 0;
+  padding: 5px 9px;
+  border-radius: 999px;
+  background: var(--lime);
+  color: var(--ink);
+  font-size: 0.75rem;
+  font-weight: 700;
+}
+
+@media (max-width: 600px) {
+  .welcome-banner {
+    padding: 10px 12px;
+    gap: 8px;
+  }
+
+  .welcome-banner h2 {
+    font-size: 1rem;
+  }
+
+  .welcome-status {
+    font-size: 0.7rem;
+  }
+}
+
+
+/* Welcome modal */
+.welcome-modal[hidden] {
+  display: none !important;
+}
+
+.welcome-modal {
+  position: fixed;
+  inset: 0;
+  z-index: 10000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+  background: rgb(16 27 43 / 72%);
+  backdrop-filter: blur(6px);
+}
+
+.welcome-modal-card {
+  position: relative;
+  width: min(100%, 460px);
+  padding: 42px 32px 34px;
+  border-radius: 24px;
+  background: var(--paper, #f7f7f2);
+  color: var(--ink, #111e2d);
+  text-align: center;
+  box-shadow: 0 24px 80px rgb(0 0 0 / 25%);
+  animation: welcome-modal-in 220ms ease-out;
+}
+
+.welcome-modal-close {
+  position: absolute;
+  top: 12px;
+  right: 16px;
+  border: 0;
+  background: transparent;
+  color: var(--ink, #111e2d);
+  font-size: 30px;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.welcome-modal-icon {
+  display: grid;
+  place-items: center;
+  width: 64px;
+  height: 64px;
+  margin: 0 auto 22px;
+  border-radius: 20px;
+  background: var(--lime, #d7f36a);
+  font-size: 30px;
+}
+
+.welcome-modal-card .welcome-eyebrow {
+  margin: 0 0 12px;
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 1.5px;
+}
+
+.welcome-modal-card h2 {
+  margin: 0 0 14px;
+  font-family: Manrope, sans-serif;
+  font-size: clamp(27px, 5vw, 36px);
+  line-height: 1.2;
+}
+
+.welcome-modal-card #welcome-message {
+  margin: 0 auto 26px;
+  max-width: 340px;
+  color: var(--muted, #747d87);
+  line-height: 1.7;
+}
+
+.welcome-modal-card #welcome-explore {
+  border: 0;
+  cursor: pointer;
+}
+
+.welcome-modal-close:focus-visible,
+.welcome-modal-card button:focus-visible {
+  outline: 3px solid var(--orange, #ff8059);
+  outline-offset: 4px;
+}
+
+@keyframes welcome-modal-in {
+  from {
+    opacity: 0;
+    transform: translateY(12px) scale(0.98);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+@media (max-width: 480px) {
+  .welcome-modal-card {
+    padding: 40px 22px 28px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .welcome-modal-card {
+    animation: none;
+  }
+}
+
+body.welcome-modal-open {
+  overflow: hidden;
+}
+
+/* Rotating GetOffDeals travel ticket themes */
+.ticket-card {
+  transition: background-color .8s ease, color .8s ease,
+              box-shadow .8s ease;
+}
+
+.ticket-top,
+.ticket-bottom,
+.ticket-main small,
+.ticket-main span,
+.ticket-plane,
+.ticket-bottom span:last-child {
+  transition: color .8s ease, border-color .8s ease;
+}
+
+.hero-art .sun-disc {
+  transition: background .8s ease, box-shadow .8s ease;
+}
+
+.hero-art .hero-destination strong,
+.hero-art .destination-kicker,
+.hero-art .route-line {
+  transition: color .8s ease;
+}
+
+.ticket-card[data-theme="international"] {
+  --ticket-bg: #ffffff;
+  --ticket-ink: #142235;
+  --ticket-accent: #d7f36a;
+  background: var(--ticket-bg);
+  color: var(--ticket-ink);
+}
+
+.ticket-card[data-theme="philippines"] {
+  --ticket-bg: #e5fff4;
+  --ticket-ink: #064e48;
+  --ticket-accent: #38d6b0;
+  background: var(--ticket-bg);
+  color: var(--ticket-ink);
+  box-shadow: 0 24px 60px #003d3340;
+}
+
+.ticket-card[data-theme="worldwide"] {
+  --ticket-bg: #fff0e8;
+  --ticket-ink: #712e29;
+  --ticket-accent: #ff815f;
+  background: var(--ticket-bg);
+  color: var(--ticket-ink);
+  box-shadow: 0 24px 60px #54221d40;
+}
+
+.ticket-card[data-theme="philippines"] .ticket-top,
+.ticket-card[data-theme="philippines"] .ticket-bottom {
+  border-color: #b7ded3;
+}
+
+.ticket-card[data-theme="worldwide"] .ticket-top,
+.ticket-card[data-theme="worldwide"] .ticket-bottom {
+  border-color: #edc9ba;
+}
+
+.ticket-card[data-theme="philippines"] .ticket-bottom,
+.ticket-card[data-theme="philippines"] .ticket-bottom span:last-child {
+  color: #087e6c;
+}
+
+.ticket-card[data-theme="worldwide"] .ticket-bottom,
+.ticket-card[data-theme="worldwide"] .ticket-bottom span:last-child {
+  color: #c14e37;
+}
+
+.hero-art[data-theme="international"] .sun-disc {
+  background: linear-gradient(145deg, #e6f78e, #9dbb59);
+}
+
+.hero-art[data-theme="philippines"] .sun-disc {
+  background: linear-gradient(145deg, #8df2d0, #31bba4);
+  box-shadow: 0 0 100px #38d6b044;
+}
+
+.hero-art[data-theme="worldwide"] .sun-disc {
+  background: linear-gradient(145deg, #ffc19e, #ff815f);
+  box-shadow: 0 0 100px #ff815f44;
+}
+
+.ticket-card.is-changing {
+  opacity: .75;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .ticket-card,
+  .ticket-top,
+  .ticket-bottom,
+  .ticket-main small,
+  .ticket-main span,
+  .ticket-plane,
+  .hero-art .sun-disc,
+  .hero-art .hero-destination strong,
+  .hero-art .destination-kicker,
+  .hero-art .route-line {
+    transition: none !important;
+  }
+}
