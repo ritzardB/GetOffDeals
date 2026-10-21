@@ -655,6 +655,18 @@ def flights():
     return render_template("flights.html")
 
 
+@app.get("/account")
+def account_page():
+    if not session.get("user_id"):
+        return redirect("/login")
+
+    return render_template(
+        "account.html",
+        first_name=session.get("first_name", "").strip(),
+        email=session.get("email", ""),
+    )
+
+
 @app.get("/login")
 def login_page():
     if session.get("user_id"):

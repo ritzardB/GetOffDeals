@@ -1,0 +1,160 @@
+
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#101b2b">
+  <title>My Account | GetOffDeals</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=Manrope:wght@600;700;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet"
+        href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body class="account-page">
+  <header class="nav-wrap">
+    <nav class="nav container">
+      <a class="brand" href="/">
+        <span class="brand-mark">↗</span>
+        GetOffDeals <span class="brand-dot">.</span>
+      </a>
+
+      <div class="account-nav-links">
+        <a href="/">Home</a>
+        <a href="/flights">Find a flight</a>
+        <form action="/auth/logout" method="post">
+          <button type="submit" class="account-signout">Sign out</button>
+        </form>
+      </div>
+    </nav>
+  </header>
+
+  <main class="account-main">
+    <section class="account-hero">
+      <div class="account-hero-overlay"></div>
+      <div class="account-hero-content">
+        <span class="account-kicker">YOUR NEXT ADVENTURE STARTS HERE</span>
+        <h1>
+          {% if first_name %}
+            Welcome back, {{ first_name }}.
+          {% else %}
+            Welcome back.
+          {% endif %}
+        </h1>
+        <p>
+          Keep your travel ideas organized and make room for your next escape.
+        </p>
+        <a class="button button-lime" href="/flights">
+          Find a flight <span>↗</span>
+        </a>
+      </div>
+    </section>
+
+    <div class="container account-content">
+      <section class="account-profile">
+        <div class="account-avatar" aria-hidden="true">
+          {{ (first_name[0] if first_name else email[0] if email else "T")|upper }}
+        </div>
+        <div class="account-profile-copy">
+          <span class="account-section-kicker">YOUR ACCOUNT</span>
+          <h2>{{ first_name if first_name else "Traveller" }}</h2>
+          <p>{{ email }}</p>
+        </div>
+        <span class="account-status">
+          <span aria-hidden="true">●</span> Signed in
+        </span>
+      </section>
+
+      <section class="account-section">
+        <div class="account-section-heading">
+          <div>
+            <span class="account-section-kicker">STAY IN THE KNOW</span>
+            <h2>Your price alerts</h2>
+            <p>Keep an eye on routes you want to fly.</p>
+          </div>
+          <span class="account-icon" aria-hidden="true">↗</span>
+        </div>
+
+        <div class="account-empty">
+          <span class="account-empty-icon" aria-hidden="true">♧</span>
+          <h3>No price alerts yet</h3>
+          <p>
+            When price-alert features are available, you can track routes
+            you're interested in here.
+          </p>
+          <a class="account-text-link" href="/flights">
+            Explore flight options <span>→</span>
+          </a>
+        </div>
+      </section>
+
+      <section class="account-section">
+        <div class="account-section-heading">
+          <div>
+            <span class="account-section-kicker">PLAN AHEAD</span>
+            <h2>Upcoming trips</h2>
+            <p>A place for the journeys you're planning.</p>
+          </div>
+          <span class="account-icon" aria-hidden="true">✈</span>
+        </div>
+
+        <div class="account-empty">
+          <span class="account-empty-icon" aria-hidden="true">⌁</span>
+          <h3>Your next trip starts with an idea</h3>
+          <p>
+            You haven't added any trips to this dashboard yet. Trip saving
+            and departure reminders will be added in a future step.
+          </p>
+          <a class="account-text-link" href="/flights">
+            Start exploring <span>→</span>
+          </a>
+        </div>
+      </section>
+
+      <section class="account-section">
+        <div class="account-section-heading">
+          <div>
+            <span class="account-section-kicker">KEEP THINGS TOGETHER</span>
+            <h2>Booking documents</h2>
+            <p>Organize travel documents from your booking provider.</p>
+          </div>
+          <span class="account-icon" aria-hidden="true">▤</span>
+        </div>
+
+        <div class="account-empty">
+          <span class="account-empty-icon" aria-hidden="true">▧</span>
+          <h3>No documents stored here</h3>
+          <p>
+            Document storage isn't connected yet. Your booking confirmation
+            and ticket, if issued, will come from the airline or booking
+            provider you choose.
+          </p>
+        </div>
+      </section>
+
+      <aside class="account-disclaimer">
+        <span aria-hidden="true">ⓘ</span>
+        <p>
+          <strong>A quick note:</strong> GetOffDeals helps you discover
+          flight options and may earn affiliate commissions from qualifying
+          links. Bookings, payments, ticket issuance, cancellations and
+          refunds are handled by the selected airline or booking provider.
+          Example prices are not guaranteed live fares.
+        </p>
+      </aside>
+    </div>
+  </main>
+
+  <footer class="footer">
+    <div class="container footer-inner">
+      <a class="brand footer-brand" href="/">
+        <span class="brand-mark">↗</span>
+        GetOffDeals <span class="brand-dot">.</span>
+      </a>
+      <span>Discover more. Travel for less.</span>
+      <span>© GetOffDeals</span>
+    </div>
+  </footer>
+</body>
+</html>
