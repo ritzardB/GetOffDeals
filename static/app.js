@@ -157,6 +157,17 @@ function renderDeals(deals, filter = 'all') {
     );
   });
 
+
+const destinationImages = {
+  MNL: "/static/images/manila.jpg",
+  CEB: "/static/images/cebu.jpg",
+  CRK: "/static/images/clark.jpg",
+  KLO: "/static/images/boracay.jpg",
+  IST: "/static/images/turkeyi.jpg",
+  TBS: "/static/images/tbilisi.jpg",
+};
+
+
   if (!shown.length) {
     grid.innerHTML =
       '<p class="deal-empty">No picks in this category yet.</p>';
@@ -167,6 +178,7 @@ function renderDeals(deals, filter = 'all') {
     const code = String(deal.code || '').toUpperCase();
     const dealOrigin = deal.origin || 'AUH';
     const destinationName = deal.destination || code;
+    const imageUrl = deal.image || destinationImages[code] || null;
 
     const partnerHref = `/go/search?${searchParams(
       dealOrigin,
@@ -205,20 +217,25 @@ function renderDeals(deals, filter = 'all') {
         aria-label="Select ${escapeHTML(destinationName)} as your flight destination"
       >
         <div
-          class="deal-visual"
-          style="background:${dealColors[index % dealColors.length]}"
-        >
+          class="deal-visual ${imageUrl ? 'has-image' : ''}"
+            style="background:${dealColors[index % dealColors.length]}">
           <span class="deal-number">
-            TAKEOFF PICK / ${String(index + 1).padStart(2, '0')}
+            GOOD DEALS PICK / ${String(index + 1).padStart(2, '0')}
           </span>
 
           <span class="deal-tag">
             ${escapeHTML(deal.tag || 'DESTINATION')}
           </span>
 
-          <span class="emoji">
-            ${escapeHTML(deal.emoji || '✈️')}
-          </span>
+          ${imageUrl
+          ? `<img
+              class="deal-image"
+              src="${escapeHTML(imageUrl)}"
+              alt="${escapeHTML(destinationName)}"
+              loading="lazy"
+            >`
+          : `<span class="emoji">${escapeHTML(deal.emoji || '✈️')}</span>`
+        }
         </div>
 
         <div class="deal-body">

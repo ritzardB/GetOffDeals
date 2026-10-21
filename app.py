@@ -135,6 +135,7 @@ TRAVELPAYOUTS_ROUTES = [
         "emoji": "🇵🇭",
         "category": "homecoming",
         "note": "Reconnect with family, food and the places that feel like home.",
+        "image": "/static/images/manila.jpg",
     },
     {
         "origin": "AUH",
@@ -144,6 +145,7 @@ TRAVELPAYOUTS_ROUTES = [
         "emoji": "🌴",
         "category": "nature",
         "note": "Island hopping, clear water and a slower pace in the Visayas.",
+        "image": "/static/images/cebu.jpg",
     },
     {
         "origin": "DXB",
@@ -153,6 +155,7 @@ TRAVELPAYOUTS_ROUTES = [
         "emoji": "⛰️",
         "category": "homecoming",
         "note": "A useful gateway for Central Luzon and trips beyond the capital.",
+        "image": "/static/images/clark.jpg",
     },
     {
         "origin": "AUH",
@@ -161,7 +164,8 @@ TRAVELPAYOUTS_ROUTES = [
         "tag": "Beach escape",
         "emoji": "🏝️",
         "category": "nature",
-        "note": "Explore Aklan and nearby island destinations.",
+        "note": "Explore Boracay, Aklan and nearby island destinations.",
+        "image": "/static/images/boracay.jpg",
     },
     {
         "origin": "AUH",
@@ -171,6 +175,7 @@ TRAVELPAYOUTS_ROUTES = [
         "emoji": "🕌",
         "category": "city",
         "note": "Historic streets, waterfront views and lively markets.",
+        "image": "/static/images/turkeyi.jpg",
     },
     {
         "origin": "AUH",
@@ -180,6 +185,7 @@ TRAVELPAYOUTS_ROUTES = [
         "emoji": "🏔️",
         "category": "nature",
         "note": "Old-town cafés, mountain views and a change of scenery.",
+        "image": "/static/images/tbilisi.jpg",
     },
 ]
 

@@ -26,21 +26,28 @@
     <div class="nav-links">
       <a href="#deals">Explore deals</a>
       <a href="#how">How it works</a>
+      <a class="mobile-flight-link" href="/flights">
+          Find a flight <span>↗</span>
+      </a>
 
       {% if session.get('user_id') %}
         <a href="#account">My Account</a>
-        <form action="/auth/logout" method="post" class="nav-logout-form">
-          <button type="submit" class="nav-logout">Sign out</button>
-        </form>
-      {% else %}
+        {% else %}
         <a href="/login">Sign in</a>
         <a href="/register">Create account</a>
       {% endif %}
     </div>
 
+    {% if session.get('user_id') %}
+      <form action="/auth/logout" method="post" class="nav-logout-form">
+        <button type="submit" class="nav-logout">Sign out</button>
+      </form>
+    {% else %}
+
     <a class="nav-cta" href="/flights">
       Find a flight <span>↗</span>
     </a>
+    {% endif %}
 
     <button
       class="menu-toggle"
@@ -50,6 +57,23 @@
     >☰</button>
   </nav>
 </header>
+
+{% if session.get('user_id') %}
+  <section class="container" id="account" style="padding-top: 24px;">
+    <div class="welcome-banner">
+      <div>
+        <p class="welcome-eyebrow">YOUR ACCOUNT</p>
+        <h2>Welcome back!</h2>
+        <p>
+          You're signed in as
+          <strong>{{ session.get('email') }}</strong>.
+        </p>
+        <p>Your next adventure starts here.</p>
+      </div>
+      <span class="welcome-status">✓ Signed in</span>
+    </div>
+  </section>
+{% endif %}
 
 <main id="top">
 <section class="hero">
