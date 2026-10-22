@@ -25,7 +25,8 @@
     <section class="auth-card">
       <span class="auth-eyebrow">WELCOME BACK</span>
       <h1>Sign in and <em>take off.</em></h1>
-      <p class="auth-intro">Sign in to your GetOffDeals account.</p>
+      <p class="auth-intro">Sign in to your GetOffDeals account.
+      Best viewed in modern browsers for optimal experience.</p>
 
       <form id="login-form">
         <label for="email">Email address</label>
@@ -42,10 +43,18 @@
         <p id="auth-status" class="auth-status" role="status" aria-live="polite"></p>
       </form>
 
-      <p class="auth-switch">
-        New to GetOffDeals? <a href="/register">Create an account</a>
-      </p>
-      <a class="auth-home" href="/">← Back to home</a>
+
+<p class="auth-switch">
+  New to GetOffDeals?
+  <a href="/register">Create an account</a>
+  </p>
+
+  <p class="auth-switch">
+    <a href="{{ url_for('forgot_password_page') }}">Forgot your password?</a>
+  </p>
+
+  <a class="auth-home" href="/">← Back to home</a>
+
     </section>
   </main>
 

@@ -309,9 +309,19 @@ def supabase_auth_config():
     }
 
 
-def supabase_auth_request(endpoint, payload=None, method="POST"):
+def supabase_auth_request(
+    endpoint,
+    payload=None,
+    method="POST",
+    access_token=None,
+):
     """Call Supabase Auth without exposing credentials or response secrets."""
     base_url, headers = supabase_auth_config()
+    headers = dict(headers)
+
+    if access_token:
+        headers["Authorization"] = f"Bearer {access_token}"
+
     url = f"{base_url}/auth/v1/{endpoint.lstrip('/')}"
 
     try:
@@ -504,6 +514,129 @@ def auth_login():
             "id": session["user_id"],
             "email": session["email"],
         }
+    ), 200
+
+@app.get("/forgot-password")
+def forgot_password_page():
+    if session.get("user_id"):
+        return redirect("/")
+    return render_template("forgot_password.html")
+
+
+@app.get("/reset-password")
+def reset_password_page():
+    if session.get("user_id"):
+        return redirect("/")
+    return render_template("reset_password.html")
+
+@app.post("/auth/forgot-password")
+def auth_forgot_password():
+    """Send a Supabase password recovery email."""
+    if not request.is_json:
+        return jsonify(error="Send a JSON request."), 400
+
+    body = request.get_json(silent=True)
+    if not isinstance(body, dict):
+        return jsonify(error="Invalid request body."), 400
+
+    email = body.get("email")
+    if not isinstance(email, str):
+        return jsonify(error="Enter a valid email address."), 400
+
+    email = email.strip().lower()
+    if (
+        len(email) > 254
+        or not re.fullmatch(r"[^\s@]+@[^\s@]+\.[^\s@]+", email)
+    ):
+        return jsonify(error="Enter a valid email address."), 400
+
+    try:
+        _, error = supabase_auth_request(
+            "recover",
+            payload={
+                "email": email,
+                "redirect_to": (
+                    "https://getoffdeals.com/reset-password"
+                ),
+            },
+        )
+    except RuntimeError:
+        app.logger.error("Supabase Auth configuration is invalid")
+        return jsonify(
+            error="Password recovery is temporarily unavailable."
+        ), 503
+
+    if error:
+        # Avoid revealing whether an account exists.
+        return jsonify(
+            message=(
+                "If an account exists for that email, "
+                "a password recovery link will be sent."
+            )
+        ), 200
+
+    return jsonify(
+        message=(
+            "If an account exists for that email, "
+            "a password recovery link will be sent."
+        )
+    ), 200
+
+
+@app.post("/auth/reset-password")
+def auth_reset_password():
+    """Set a new password using a Supabase recovery access token."""
+    if not request.is_json:
+        return jsonify(error="Send a JSON request."), 400
+
+    body = request.get_json(silent=True)
+    if not isinstance(body, dict):
+        return jsonify(error="Invalid request body."), 400
+
+    access_token = body.get("access_token")
+    password = body.get("password")
+
+    if (
+        not isinstance(access_token, str)
+        or not access_token.strip()
+        or len(access_token) > 8192
+    ):
+        return jsonify(
+            error="Your recovery link is invalid or expired. Request a new one."
+        ), 400
+
+    if (
+        not isinstance(password, str)
+        or len(password) < 8
+        or len(password) > 128
+    ):
+        return jsonify(
+            error="Password must be between 8 and 128 characters."
+        ), 400
+
+    try:
+        data, error = supabase_auth_request(
+            "user",
+            payload={"password": password},
+            method="PUT",
+            access_token=access_token,
+        )
+    except RuntimeError:
+        app.logger.error("Supabase Auth configuration is invalid")
+        return jsonify(
+            error="Password reset is temporarily unavailable."
+        ), 503
+
+    if error or not isinstance(data, dict) or not data.get("id"):
+        return jsonify(
+            error=(
+                "Your recovery link is invalid or expired. "
+                "Request a new one."
+            )
+        ), 400
+
+    return jsonify(
+        message="Your password has been updated. You can now sign in."
     ), 200
 
 

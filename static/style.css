@@ -1035,3 +1035,107 @@ body.welcome-modal-open {
     padding: 24px 12px;
   }
 }
+
+/* Mobile hero: preserve the orbit and reduce destination-card overlap */
+@media (max-width: 600px) {
+  .hero-art {
+    height: 370px;
+    min-width: 0;
+    overflow: hidden;
+  }
+
+  .hero-art .hero-glow {
+    width: 320px;
+    height: 320px;
+    right: 0;
+    top: 8%;
+  }
+
+  .hero-art .orbit-one {
+    width: 290px;
+    height: 205px;
+  }
+
+  .hero-art .orbit-two {
+    width: 330px;
+    height: 245px;
+  }
+
+  .hero-art .sun-disc {
+    width: 205px;
+    height: 205px;
+  }
+
+  .hero-art .hero-destination {
+    transform: translateY(-12px) scale(0.84);
+  }
+
+  .hero-art .hero-destination strong {
+    font-size: 32px;
+    margin: 8px 0 12px;
+  }
+
+  .hero-art .floating-stamp {
+    width: 48px;
+    height: 48px;
+    top: 16px;
+    right: 8px;
+    font-size: 11px;
+  }
+
+  .hero-art .ticket-card {
+    width: min(290px, 86%);
+    right: 4px;
+    bottom: 8px;
+    padding: 11px 13px;
+    border-radius: 10px;
+  }
+
+  .hero-art .ticket-top {
+    padding-bottom: 8px;
+    font-size: 7px;
+  }
+
+  .hero-art .ticket-main {
+    padding: 10px 0;
+  }
+
+  .hero-art .ticket-main b {
+    font-size: 19px;
+  }
+
+  .hero-art .ticket-bottom {
+    padding-top: 8px;
+    font-size: 7px;
+  }
+}
+
+@media (max-width: 380px) {
+  .hero-art {
+    height: 335px;
+  }
+
+  .hero-art .orbit-one {
+    width: 255px;
+    height: 180px;
+  }
+
+  .hero-art .orbit-two {
+    width: 290px;
+    height: 215px;
+  }
+
+  .hero-art .sun-disc {
+    width: 180px;
+    height: 180px;
+  }
+
+  .hero-art .hero-destination {
+    transform: translateY(-12px) scale(0.76);
+  }
+
+  .hero-art .ticket-card {
+    width: 84%;
+    padding: 9px 11px;
+  }
+}
