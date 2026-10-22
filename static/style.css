@@ -1139,3 +1139,26 @@ body.welcome-modal-open {
     padding: 9px 11px;
   }
 }
+
+/* Mobile navigation: place the flight CTA at the bottom */
+@media (max-width: 650px) {
+  .nav-links.mobile-open .mobile-flight-link {
+    order: 99;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    width: fit-content;
+    min-width: 138px;
+    margin-top: 2px;
+    padding: 12px 17px;
+    border: 1px solid #45505c;
+    border-radius: 30px;
+    color: #fff;
+    font-weight: 700;
+  }
+
+  .nav-links.mobile-open .mobile-flight-link span {
+    margin-left: 12px;
+    color: var(--lime);
+  }
+}
