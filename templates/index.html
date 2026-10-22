@@ -23,20 +23,59 @@
       </span>
     {% endif %}
 
+    
     <div class="nav-links">
-      <a href="#deals">Explore deals</a>
-      <a href="#how">How it works</a>
+      <a href="#deals">
+        <svg class="nav-icon" viewBox="0 0 24 24" aria-hidden="true">
+          <circle cx="11" cy="11" r="7"></circle>
+          <path d="m16 16 4 4M8 11l2 2 4-4"></path>
+        </svg>
+        <span>Explore deals</span>
+      </a>
+
+      <a href="#how">
+        <svg class="nav-icon" viewBox="0 0 24 24" aria-hidden="true">
+          <path d="M4 5.5A2.5 2.5 0 0 1 6.5 3H20v16H6.5A2.5 2.5 0 0 0 4 21z"></path>
+          <path d="M4 5.5V21M8 7h8M8 11h7"></path>
+        </svg>
+        <span>How it works</span>
+      </a>
+
       <a class="mobile-flight-link" href="/flights">
-          Find a flight <span>↗</span>
+        <svg class="nav-icon" viewBox="0 0 24 24" aria-hidden="true">
+          <path d="m21 3-7.5 18-3.5-7-7-3.5z"></path>
+          <path d="M21 3 10 14"></path>
+        </svg>
+        <span>Find a flight <span class="nav-arrow">↗</span></span>
       </a>
 
       {% if session.get('user_id') %}
-        <a href="/account">My Account</a>
-        {% else %}
-        <a href="/login">Sign in</a>
-        <a href="/register">Create account</a>
+        <a href="/account">
+          <svg class="nav-icon" viewBox="0 0 24 24" aria-hidden="true">
+            <circle cx="12" cy="8" r="4"></circle>
+            <path d="M4 21a8 8 0 0 1 16 0"></path>
+          </svg>
+          <span>My Account</span>
+        </a>
+      {% else %}
+        <a href="/login">
+          <svg class="nav-icon" viewBox="0 0 24 24" aria-hidden="true">
+            <path d="M10 17l5-5-5-5M15 12H3"></path>
+            <path d="M12 3h7a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-7"></path>
+          </svg>
+          <span>Sign in</span>
+        </a>
+
+        <a href="/register">
+          <svg class="nav-icon" viewBox="0 0 24 24" aria-hidden="true">
+            <circle cx="9" cy="8" r="4"></circle>
+            <path d="M2 21a7 7 0 0 1 14 0M19 8v6M16 11h6"></path>
+          </svg>
+          <span>Create account</span>
+        </a>
       {% endif %}
     </div>
+
 
     {% if session.get('user_id') %}
       <form action="/auth/logout" method="post" class="nav-logout-form">
