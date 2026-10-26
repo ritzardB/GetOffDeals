@@ -66,28 +66,113 @@
         </span>
       </section>
 
-      <section class="account-section">
+
+      <section class="account-section" id="price-alerts-section">
         <div class="account-section-heading">
           <div>
             <span class="account-section-kicker">STAY IN THE KNOW</span>
             <h2>Your price alerts</h2>
-            <p>Keep an eye on routes you want to fly.</p>
+            <p>Choose a route and target fare to track.</p>
           </div>
           <span class="account-icon" aria-hidden="true">↗</span>
         </div>
 
-        <div class="account-empty">
-          <span class="account-empty-icon" aria-hidden="true">♧</span>
-          <h3>No price alerts yet</h3>
-          <p>
-            When price-alert features are available, you can track routes
-            you're interested in here.
-          </p>
-          <a class="account-text-link" href="/flights">
-            Explore flight options <span>→</span>
-          </a>
+        <form id="price-alert-form" class="price-alert-form">
+          <div class="price-alert-form-grid">
+            <label>
+              Origin airport
+              <input name="origin" type="text" placeholder="AUH" maxlength="3" required pattern="[A-Za-z]{3}">
+            </label>
+            <label>
+              Destination airport
+              <input name="destination" type="text" placeholder="MNL" maxlength="3" required pattern="[A-Za-z]{3}">
+            </label>
+            <label>
+              Departure
+              <input name="departure_date" type="date" required>
+            </label>
+            <label>
+              Return (optional)
+              <input name="return_date" type="date">
+            </label>
+            <label>
+              Adults
+              <select name="adults" required>
+                {% for n in range(1, 10) %}
+                  <option value="{{ n }}" {% if n == 1 %}selected{% endif %}>{{ n }}</option>
+                {% endfor %}
+              </select>
+            </label>
+            <label>
+              Cabin class
+              <select name="cabin_class">
+                <option value="ECONOMY">Economy</option>
+                <option value="PREMIUM_ECONOMY">Premium economy</option>
+                <option value="BUSINESS">Business</option>
+                <option value="FIRST">First</option>
+              </select>
+            </label>
+            <label>
+              Target price
+              <input name="target_price" type="number" min="0.01" step="0.01" placeholder="1800" required>
+            </label>
+            <label>
+              Currency
+              <select name="currency">
+                <option value="AED">AED</option>
+                <option value="USD">USD</option>
+                <option value="PHP">PHP</option>
+              </select>
+            </label>
+          </div>
+          <button class="button button-lime" type="submit">Create price alert</button>
+          <p id="price-alert-form-message" class="price-alert-message" role="status" aria-live="polite"></p>
+        </form>
+
+        <div class="account-alert-list" id="price-alert-list">
+          {% if alerts %}
+            {% for alert in alerts %}
+              <article class="account-alert-card">
+                <div class="account-alert-route">
+                  <strong>{{ alert.origin }} → {{ alert.destination }}</strong>
+                  <span class="account-status">
+                    {{ "Active" if alert.is_active else "Paused" }}
+                  </span>
+                </div>
+                <p>
+                  Departure: {{ alert.departure_date.strftime("%d %b %Y") }}
+                  {% if alert.return_date %}
+                    · Return: {{ alert.return_date.strftime("%d %b %Y") }}
+                  {% endif %}
+                </p>
+                <p>
+                  Target price:
+                  <strong>{{ alert.currency }} {{ "%.2f"|format(alert.target_price) }}</strong>
+                </p>
+                <p>{{ alert.adults }} adult(s) · {{ alert.cabin_class|replace("_", " ")|title }}</p>
+                <div class="price-alert-actions">
+                  <button type="button" class="price-alert-toggle"
+                          data-alert-id="{{ alert.id }}"
+                          data-active="{{ 'true' if alert.is_active else 'false' }}">
+                    {{ "Pause" if alert.is_active else "Resume" }}
+                  </button>
+                  <button type="button" class="price-alert-delete"
+                          data-alert-id="{{ alert.id }}">
+                    Delete
+                  </button>
+                </div>
+              </article>
+            {% endfor %}
+          {% else %}
+            <div class="account-empty" id="price-alert-empty">
+              <span class="account-empty-icon" aria-hidden="true">♧</span>
+              <h3>No price alerts yet</h3>
+              <p>Create an alert above to save a route and target fare.</p>
+            </div>
+          {% endif %}
         </div>
       </section>
+
 
       <section class="account-section">
         <div class="account-section-heading">
@@ -156,5 +241,154 @@
       <span>© GetOffDeals</span>
     </div>
   </footer>
+
+
+<script>
+(() => {
+  const form = document.getElementById("price-alert-form");
+  const message = document.getElementById("price-alert-form-message");
+  const list = document.getElementById("price-alert-list");
+
+  if (!form || !message || !list) return;
+
+  function showMessage(text, isError = false) {
+    message.textContent = text;
+    message.classList.toggle("is-error", isError);
+  }
+
+  async function apiRequest(url, options = {}) {
+    const response = await fetch(url, {
+      credentials: "same-origin",
+      ...options,
+      headers: {
+        ...(options.body ? { "Content-Type": "application/json" } : {}),
+        ...options.headers
+      }
+    });
+
+    const data = await response.json().catch(() => ({}));
+    if (!response.ok) {
+      throw new Error(data.error || "Request failed. Please try again.");
+    }
+    return data;
+  }
+
+  function escapeHtml(value) {
+    return String(value ?? "").replace(/[&<>"']/g, char => ({
+      "&": "&amp;",
+      "<": "&lt;",
+      ">": "&gt;",
+      '"': "&quot;",
+      "'": "&#39;"
+    })[char]);
+  }
+
+  function displayDate(value) {
+    if (!value) return "";
+    const [year, month, day] = value.split("-").map(Number);
+    return new Date(year, month - 1, day).toLocaleDateString(undefined, {
+      day: "2-digit", month: "short", year: "numeric"
+    });
+  }
+
+  function renderAlerts(alerts) {
+    if (!alerts.length) {
+      list.innerHTML = `
+        <div class="account-empty" id="price-alert-empty">
+          <span class="account-empty-icon" aria-hidden="true">♧</span>
+          <h3>No price alerts yet</h3>
+          <p>Create an alert above to save a route and target fare.</p>
+        </div>`;
+      return;
+    }
+
+    list.innerHTML = alerts.map(alert => {
+      const active = Boolean(alert.is_active);
+      const cabin = String(alert.cabin_class || "").replaceAll("_", " ");
+      return `
+        <article class="account-alert-card">
+          <div class="account-alert-route">
+            <strong>${escapeHtml(alert.origin)} → ${escapeHtml(alert.destination)}</strong>
+            <span class="account-status">${active ? "Active" : "Paused"}</span>
+          </div>
+          <p>Departure: ${escapeHtml(displayDate(alert.departure_date))}
+            ${alert.return_date ? ` · Return: ${escapeHtml(displayDate(alert.return_date))}` : ""}
+          </p>
+          <p>Target price: <strong>${escapeHtml(alert.currency)} ${Number(alert.target_price).toFixed(2)}</strong></p>
+          <p>${escapeHtml(alert.adults)} adult(s) · ${escapeHtml(cabin.replace(/\b\w/g, c => c.toUpperCase()))}</p>
+          <div class="price-alert-actions">
+            <button type="button" class="price-alert-toggle"
+              data-alert-id="${escapeHtml(alert.id)}"
+              data-active="${active ? "true" : "false"}">${active ? "Pause" : "Resume"}</button>
+            <button type="button" class="price-alert-delete"
+              data-alert-id="${escapeHtml(alert.id)}">Delete</button>
+          </div>
+        </article>`;
+    }).join("");
+  }
+
+  async function refreshAlerts() {
+    const data = await apiRequest("/api/price-alerts");
+    renderAlerts(data.alerts || []);
+  }
+
+  form.addEventListener("submit", async event => {
+    event.preventDefault();
+    if (!form.reportValidity()) return;
+
+    const values = Object.fromEntries(new FormData(form).entries());
+    values.origin = values.origin.trim().toUpperCase();
+    values.destination = values.destination.trim().toUpperCase();
+    values.adults = Number(values.adults);
+    values.target_price = Number(values.target_price);
+    if (!values.return_date) values.return_date = null;
+
+    showMessage("Saving your alert…");
+    const submit = form.querySelector('[type="submit"]');
+    submit.disabled = true;
+
+    try {
+      await apiRequest("/api/price-alerts", {
+        method: "POST",
+        body: JSON.stringify(values)
+      });
+      form.reset();
+      showMessage("Price alert saved.");
+      await refreshAlerts();
+    } catch (error) {
+      showMessage(error.message, true);
+    } finally {
+      submit.disabled = false;
+    }
+  });
+
+  list.addEventListener("click", async event => {
+    const toggle = event.target.closest(".price-alert-toggle");
+    const remove = event.target.closest(".price-alert-delete");
+
+    if (!toggle && !remove) return;
+
+    try {
+      if (toggle) {
+        const isActive = toggle.dataset.active === "true";
+        await apiRequest(`/api/price-alerts/${encodeURIComponent(toggle.dataset.alertId)}`, {
+          method: "PATCH",
+          body: JSON.stringify({ is_active: !isActive })
+        });
+        showMessage(isActive ? "Alert paused." : "Alert resumed.");
+      } else {
+        if (!window.confirm("Delete this price alert?")) return;
+        await apiRequest(`/api/price-alerts/${encodeURIComponent(remove.dataset.alertId)}`, {
+          method: "DELETE"
+        });
+        showMessage("Price alert deleted.");
+      }
+      await refreshAlerts();
+    } catch (error) {
+      showMessage(error.message, true);
+    }
+  });
+})();
+</script>
 </body>
 </html>

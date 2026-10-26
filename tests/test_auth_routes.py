@@ -110,15 +110,28 @@ def test_login_success_rotates_session_and_returns_user(
             },
         }, None
 
+    def fake_sync_authenticated_user(
+        user_id, email, first_name="", last_name=""
+    ):
+        return user_id
+
     def fake_regenerate_session_id(session):
         session.sid = "rotated-test-session-id"
         session.modified = True
 
     monkeypatch.setattr(
-        app_module, "supabase_auth_request", fake_supabase_request
+        app_module, "supabase_auth_request",
+        fake_supabase_request
     )
+
     monkeypatch.setattr(
-        app_module, "regenerate_session_id", fake_regenerate_session_id
+        app_module, "sync_authenticated_user",
+        fake_sync_authenticated_user,
+    )
+
+    monkeypatch.setattr(
+        app_module, "regenerate_session_id",
+        fake_regenerate_session_id
     )
 
     response = client.post(
