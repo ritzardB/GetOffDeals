@@ -114,7 +114,12 @@ def test_create_price_alert_inserts_for_authenticated_user(
     alert_id = str(uuid4())
     captured = {}
 
+
     class FakeCursor:
+        def __init__(self):
+            self.query = ""
+            self.params = None
+
         def __enter__(self):
             return self
 
@@ -122,11 +127,16 @@ def test_create_price_alert_inserts_for_authenticated_user(
             return False
 
         def execute(self, query, params=None):
+            self.query = query
+            self.params = params
             captured["query"] = query
             captured["params"] = params
 
         def fetchone(self):
-            params = captured["params"]
+            if "SELECT email FROM public.users" in self.query:
+                return {"email": "test@example.com"}
+
+            params = self.params
             return {
                 "id": alert_id,
                 "user_id": params["user_id"],
@@ -143,6 +153,7 @@ def test_create_price_alert_inserts_for_authenticated_user(
                 "created_at": None,
                 "updated_at": None,
             }
+
 
     class FakeConnection:
         def __enter__(self):
@@ -206,7 +217,15 @@ def test_list_price_alerts_scopes_query_to_current_user(
             return FakeCursor()
 
     monkeypatch.setattr(
-        alerts_module, "get_connection", lambda: FakeConnection()
+        alerts_module,
+        "get_connection",
+        lambda: FakeConnection(),
+    )
+
+    monkeypatch.setattr(
+        alerts_module,
+        "send_price_alert_confirmation",
+        lambda email, alert: {"id": "test-email-id"},
     )
 
     with client.session_transaction() as flask_session:

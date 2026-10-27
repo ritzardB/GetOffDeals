@@ -5,7 +5,13 @@ from datetime import date
 from decimal import Decimal, InvalidOperation
 from uuid import UUID
 
+import logging
+
+from getoffdeals.email_service import send_price_alert_confirmation
+
 from flask import Blueprint, jsonify, request, session
+
+logger = logging.getLogger(__name__)
 
 from getoffdeals.database import get_connection
 
@@ -163,6 +169,14 @@ def create_price_alert():
 
     with get_connection() as conn:
         with conn.cursor() as cur:
+
+            cur.execute(
+                "SELECT email FROM public.users WHERE id = %s",
+                (user_id,),
+            )
+            user_row = cur.fetchone()
+            user_email = user_row["email"] if user_row else None
+
             cur.execute(
                 """
                 INSERT INTO public.flight_alerts (
@@ -175,13 +189,22 @@ def create_price_alert():
                     %(cabin_class)s, %(target_price)s, %(currency)s
                 )
                 RETURNING id, user_id, origin, destination, departure_date,
-                          return_date, adults, cabin_class, target_price,
-                          currency, is_active, last_checked_at, created_at,
-                          updated_at
+                    return_date, adults, cabin_class, target_price,
+                    currency, is_active, last_checked_at, created_at,
+                    updated_at
                 """,
                 {"user_id": user_id, **values},
             )
             alert = _alert_dict(cur.fetchone())
+
+    if user_email:
+        try:
+            send_price_alert_confirmation(user_email, alert)
+        except Exception:
+            logger.exception(
+                "Price alert confirmation email failed for alert %s",
+                alert.get("id"),
+            )
 
     return jsonify(alert=alert), 201
 
@@ -236,9 +259,9 @@ def update_price_alert(alert_id):
                 SET {", ".join(assignments)}
                 WHERE id = %(alert_id)s AND user_id = %(user_id)s
                 RETURNING id, user_id, origin, destination, departure_date,
-                          return_date, adults, cabin_class, target_price,
-                          currency, is_active, last_checked_at, created_at,
-                          updated_at
+                return_date, adults, cabin_class, target_price,
+                currency, is_active, last_checked_at, created_at,
+                updated_at
                 """,
                 params,
             )
