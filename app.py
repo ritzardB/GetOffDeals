@@ -964,7 +964,7 @@ def about():
             ),
             (
                 "Contact",
-                "Questions or feedback? Email inforichapps@gmail.com.",
+                "Questions or feedback? Email info@getoffdeals.com.",
             ),
         ],
     )
@@ -981,7 +981,7 @@ def contact():
             (
                 "Get in touch",
                 "For questions, feedback, corrections, or business inquiries, "
-                "email us at inforichapps@gmail.com.",
+                "email us at info@getoffdeals.com.",
             ),
             (
                 "Before booking",
@@ -1034,11 +1034,11 @@ def privacy():
                 "We should retain personal information only as needed for "
                 "the purpose for which it was collected and applicable "
                 "obligations. To ask about information you submitted to us, "
-                "email inforichapps@gmail.com.",
+                "email info@getoffdeals.com.",
             ),
             (
                 "Contact",
-                "For privacy questions, contact inforichapps@gmail.com.",
+                "For privacy questions, contact info@getoffdeals.com.",
             ),
         ],
     )
@@ -1086,7 +1086,7 @@ def terms():
             (
                 "Contact",
                 "Questions about these terms can be sent to "
-                "inforichapps@gmail.com.",
+                "info@getoffdeals.com.",
             ),
         ],
     )
@@ -1128,7 +1128,7 @@ def affiliate_disclosure():
             (
                 "Contact",
                 "For questions about this disclosure, email "
-                "inforichapps@gmail.com.",
+                "info@getoffdeals.com.",
             ),
         ],
     )
