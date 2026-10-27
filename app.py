@@ -12,6 +12,9 @@ import sqlite3
 import time
 from datetime import date
 from urllib.parse import quote
+from uuid import UUID
+
+from getoffdeals.database import get_connection
 
 import requests
 from dotenv import load_dotenv
@@ -21,11 +24,51 @@ from getoffdeals.postgres_sessions import (
     PostgresSessionInterface,
     regenerate_session_id,
 )
+from getoffdeals.price_alerts import price_alerts_bp
+
 
 load_dotenv()
 
 app = Flask(__name__)
+app.register_blueprint(price_alerts_bp)
 app.config["JSON_SORT_KEYS"] = False
+
+
+def sync_authenticated_user(user_id, email, first_name="", last_name=""):
+    """Synchronize a Supabase Auth user into public.users."""
+    try:
+        normalized_id = str(UUID(str(user_id)))
+    except (ValueError, TypeError, AttributeError) as exc:
+        raise ValueError("Authenticated user ID must be a valid UUID.") from exc
+
+    if not isinstance(email, str) or not email.strip():
+        raise ValueError("Authenticated user email is required.")
+
+    with get_connection() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                """
+                INSERT INTO public.users (
+                    id, email, first_name, last_name,
+                    created_at, updated_at
+                )
+                VALUES (%s, %s, %s, %s, NOW(), NOW())
+                ON CONFLICT (id) DO UPDATE SET
+                    email = EXCLUDED.email,
+                    first_name = EXCLUDED.first_name,
+                    last_name = EXCLUDED.last_name,
+                    updated_at = NOW()
+                """,
+                (
+                    normalized_id,
+                    email.strip().lower(),
+                    first_name.strip() if isinstance(first_name, str) else "",
+                    last_name.strip() if isinstance(last_name, str) else "",
+                ),
+            )
+
+    return normalized_id
+
 
 # Secure server-side authentication session configuration.
 app.config["SECRET_KEY"] = os.getenv("FLASK_SECRET_KEY")
@@ -508,6 +551,24 @@ def auth_login():
     )
 
 
+    try:
+        sync_authenticated_user(
+            user_id=session["user_id"],
+            email=session["email"],
+            first_name=session["first_name"],
+            last_name=session["last_name"],
+        )
+    except ValueError:
+        app.logger.warning("Supabase returned an invalid user ID or email.")
+        session.clear()
+        return jsonify(error="Unable to initialize your account."), 401
+    except Exception:
+        app.logger.exception("Could not synchronize authenticated user.")
+        session.clear()
+        return jsonify(error="Login is temporarily unavailable."), 503
+
+
+
     return jsonify(
         message="Login successful.",
         user={
@@ -687,6 +748,35 @@ def init_db():
         )
 
 
+        conn.execute(
+            """
+            CREATE TABLE IF NOT EXISTS price_alerts (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                user_id TEXT NOT NULL,
+                origin TEXT NOT NULL,
+                destination TEXT NOT NULL,
+                departure_date TEXT NOT NULL,
+                return_date TEXT,
+                adults INTEGER NOT NULL DEFAULT 1,
+                currency TEXT NOT NULL DEFAULT 'AED',
+                target_price REAL NOT NULL,
+                is_active INTEGER NOT NULL DEFAULT 1,
+                last_notified_price REAL,
+                last_notified_at TEXT,
+                created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+            )
+            """
+        )
+
+        conn.execute(
+            """
+            CREATE INDEX IF NOT EXISTS idx_price_alerts_user_id
+            ON price_alerts (user_id)
+            """
+        )
+
+
 init_db()
 
 
@@ -788,15 +878,43 @@ def flights():
     return render_template("flights.html")
 
 
+
 @app.get("/account")
 def account_page():
     if not session.get("user_id"):
         return redirect("/login")
 
+    alerts = []
+    try:
+        user_id = str(UUID(str(session["user_id"])))
+
+        with get_connection() as conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    """
+                    SELECT id, origin, destination, departure_date,
+                           return_date, adults, cabin_class, target_price,
+                           currency, is_active, created_at
+                    FROM public.flight_alerts
+                    WHERE user_id = %s
+                    ORDER BY created_at DESC
+                    """,
+                    (user_id,),
+                )
+                alerts = cur.fetchall()
+
+    except ValueError:
+        # Mock or invalid session IDs cannot identify PostgreSQL alerts.
+        alerts = []
+    except Exception:
+        app.logger.exception("Could not load price alerts for account page.")
+        alerts = []
+
     return render_template(
         "account.html",
         first_name=session.get("first_name", "").strip(),
         email=session.get("email", ""),
+        alerts=alerts,
     )
 
 
