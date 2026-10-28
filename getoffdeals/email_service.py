@@ -49,3 +49,51 @@ def send_price_alert_confirmation(to_email, alert):
         </div>
         """,
     })
+
+
+
+def send_newsletter_confirmation(
+    to_email,
+    confirmation_url,
+    unsubscribe_url,
+):
+    """Send a double-opt-in confirmation email for the newsletter."""
+    api_key = os.getenv("RESEND_API_KEY")
+    sender = os.getenv("EMAIL_FROM")
+
+    if not api_key or not sender:
+        raise RuntimeError("Resend email configuration is missing.")
+
+    safe_confirmation_url = escape(confirmation_url, quote=True)
+    safe_unsubscribe_url = escape(unsubscribe_url, quote=True)
+
+    resend.api_key = api_key
+
+    return resend.Emails.send({
+        "from": sender,
+        "to": [to_email],
+        "subject": "Confirm your GetOffDeals fare updates",
+        "html": f"""
+        <div style="font-family:Arial,sans-serif;line-height:1.6;max-width:600px">
+          <h2>Confirm your GetOffDeals subscription</h2>
+          <p>You requested occasional flight-deal inspiration
+          from GetOffDeals.</p>
+          <p>Please confirm your email address using the link below:</p>
+          <p>
+            <a href="{safe_confirmation_url}"
+               style="display:inline-block;padding:12px 18px;
+                      background:#c8f169;color:#14202b;
+                      text-decoration:none;font-weight:bold">
+              Confirm my subscription
+            </a>
+          </p>
+          <p>This link expires in 24 hours. If you didn't request these
+          emails, you can ignore this message.</p>
+          <p>
+            To stop receiving GetOffDeals fare updates later,
+            <a href="{safe_unsubscribe_url}">unsubscribe here</a>.
+          </p>
+          <p>GetOffDeals</p>
+        </div>
+        """,
+    })

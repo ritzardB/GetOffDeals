@@ -9,6 +9,7 @@ Aviasales tracking link configured in the environment.
 import os
 import re
 import sqlite3
+import psycopg
 import time
 from datetime import date
 from urllib.parse import quote
@@ -26,11 +27,21 @@ from getoffdeals.postgres_sessions import (
 )
 from getoffdeals.price_alerts import price_alerts_bp
 
+from getoffdeals.unsubscribe_routes import unsubscribe_bp
+
+from getoffdeals.email_service import send_newsletter_confirmation
+
+from getoffdeals.newsletter_service import (
+    prepare_subscription,
+    confirm_subscription,
+    unsubscribe_subscription,
+)
 
 load_dotenv()
 
 app = Flask(__name__)
 app.register_blueprint(price_alerts_bp)
+app.register_blueprint(unsubscribe_bp)
 app.config["JSON_SORT_KEYS"] = False
 
 
@@ -719,9 +730,14 @@ def db_connect():
     conn.row_factory = sqlite3.Row
     return conn
 
+def newsletter_db_connect():
+    """Connect to PostgreSQL for newsletter operations."""
+    return get_connection()
+
 
 def init_db():
     with db_connect() as conn:
+
         conn.execute(
             """
             CREATE TABLE IF NOT EXISTS subscribers (
@@ -730,6 +746,52 @@ def init_db():
                 consent INTEGER NOT NULL DEFAULT 0,
                 created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
             )
+            """
+        )
+
+        # Add newsletter double-opt-in fields without rebuilding the table.
+        subscriber_columns = {
+            row["name"]
+            for row in conn.execute(
+                "PRAGMA table_info(subscribers)"
+            ).fetchall()
+        }
+
+        newsletter_columns = {
+            "status": (
+                "TEXT NOT NULL DEFAULT 'pending' "
+                "CHECK (status IN ('pending', 'confirmed', 'unsubscribed'))"
+            ),
+            "consent_at": "TEXT",
+            "confirmed_at": "TEXT",
+            "confirmation_token_hash": "TEXT",
+            "confirmation_expires_at": "TEXT",
+            "unsubscribe_token_hash": "TEXT",
+            "unsubscribed_at": "TEXT",
+        }
+
+        for column_name, column_definition in newsletter_columns.items():
+            if column_name not in subscriber_columns:
+                conn.execute(
+                    f"ALTER TABLE subscribers ADD COLUMN "
+                    f"{column_name} {column_definition}"
+                )
+
+        conn.execute(
+            """
+            CREATE UNIQUE INDEX IF NOT EXISTS
+            idx_subscribers_confirmation_token
+            ON subscribers (confirmation_token_hash)
+            WHERE confirmation_token_hash IS NOT NULL
+            """
+        )
+
+        conn.execute(
+            """
+            CREATE UNIQUE INDEX IF NOT EXISTS
+            idx_subscribers_unsubscribe_token
+            ON subscribers (unsubscribe_token_hash)
+            WHERE unsubscribe_token_hash IS NOT NULL
             """
         )
 
@@ -1414,70 +1476,195 @@ def search_flights():
 def newsletter_signup():
     payload = request.get_json(silent=True) or request.form
 
-    email = str(
-        payload.get("email", "")
-    ).strip().lower()
-
-    consent = payload.get("consent") in (
-        True,
-        "true",
-        "on",
-        "1",
-        1,
-    )
+    email = str(payload.get("email", "")).strip().lower()
+    consent = payload.get("consent") in (True, "true", "on", "1", 1)
 
     if (
         len(email) > 254
         or not re.fullmatch(r"[^\s@]+@[^\s@]+\.[^\s@]+", email)
     ):
-        return jsonify(
-            {"error": "Enter a valid email address."}
-        ), 400
+        return jsonify({"error": "Enter a valid email address."}), 400
 
     if not consent:
-        return jsonify(
-            {
-                "error": (
-                    "Please confirm you agree to receive "
-                    "GetOffDeals fare updates."
-                )
-            }
-        ), 400
+        return jsonify({
+            "error": (
+                "Please confirm you agree to receive "
+                "GetOffDeals fare updates."
+            )
+        }), 400
+
+    public_base_url = os.getenv("PUBLIC_BASE_URL", "").strip().rstrip("/")
+    if not public_base_url.startswith("https://"):
+        app.logger.error("PUBLIC_BASE_URL must be configured with HTTPS.")
+        return jsonify({
+            "error": "Newsletter signup is temporarily unavailable."
+        }), 503
 
     try:
-        with db_connect() as conn:
-            conn.execute(
-                """
-                INSERT INTO subscribers (email, consent)
-                VALUES (?, 1)
-                ON CONFLICT(email)
-                DO UPDATE SET consent=1
-                """,
-                (email,),
-            )
+        with newsletter_db_connect() as conn:
+            subscription = prepare_subscription(conn, email)
 
-    except sqlite3.Error:
-        app.logger.exception(
-            "Could not save newsletter subscription"
+        if subscription["status"] == "already_confirmed":
+            return jsonify({
+                "message": (
+                    "This address is already subscribed to GetOffDeals "
+                    "fare updates."
+                )
+            }), 200
+
+        confirmation_token = subscription["confirmation_token"]
+
+        confirmation_url = (
+            f"{public_base_url}/newsletter/confirm/{confirmation_token}"
         )
 
-        return jsonify(
-            {
-                "error": (
-                    "Signup could not be saved right now. "
-                    "Please try again later."
-                )
-            }
-        ), 500
+        unsubscribe_url = (
+            f"{public_base_url}/newsletter/unsubscribe/"
+            f"{subscription['unsubscribe_token']}"
+        )
 
-    return jsonify(
-        {
-            "message": (
-                "You're on the list! Email delivery is not connected yet, "
-                "but your signup has been saved."
+        send_newsletter_confirmation(
+            email,
+            confirmation_url,
+            unsubscribe_url,
+        )
+
+    except (sqlite3.Error, psycopg.Error):
+        app.logger.exception("Could not save newsletter subscription")
+        return jsonify({
+            "error": (
+                "Signup could not be saved right now. "
+                "Please try again later."
             )
-        }
-    ), 201
+        }), 500
+    except Exception:
+        app.logger.exception("Could not send newsletter confirmation")
+        return jsonify({
+            "error": (
+                "We couldn't send your confirmation email right now. "
+                "Please try again later."
+            )
+        }), 503
+
+    return jsonify({
+        "message": (
+            "Please check your email and click the confirmation link "
+            "to complete your GetOffDeals subscription."
+        )
+    }), 202
+
+
+
+@app.route(
+    "/newsletter/confirm/<token>",
+    methods=["GET", "POST"],
+)
+def newsletter_confirm(token):
+    import hmac
+    import secrets
+
+    if not isinstance(token, str) or not 20 <= len(token) <= 200:
+        abort(404)
+
+    if request.method == "GET":
+        csrf_token = secrets.token_urlsafe(32)
+        session["newsletter_confirm_csrf_token"] = csrf_token
+
+        response = app.make_response(
+            render_template(
+                "newsletter_confirm.html",
+                result=None,
+                csrf_token=csrf_token,
+            )
+        )
+    else:
+        expected = session.get("newsletter_confirm_csrf_token")
+        submitted = request.form.get("csrf_token", "")
+
+        if (
+            not isinstance(expected, str)
+            or not isinstance(submitted, str)
+            or not hmac.compare_digest(expected, submitted)
+        ):
+            abort(400, description="Invalid form token. Please reopen the link.")
+
+        session.pop("newsletter_confirm_csrf_token", None)
+
+        try:
+            with newsletter_db_connect() as conn:
+                result = confirm_subscription(conn, token)
+        except (sqlite3.Error, psycopg.Error):
+            app.logger.exception("Newsletter confirmation failed")
+            result = False
+            response = app.make_response(
+                render_template("newsletter_confirm.html", result=result)
+            )
+            response.status_code = 500
+        else:
+            response = app.make_response(
+                render_template("newsletter_confirm.html", result=result)
+            )
+
+    response.headers["Cache-Control"] = "no-store"
+    response.headers["Referrer-Policy"] = "no-referrer"
+    response.headers["X-Content-Type-Options"] = "nosniff"
+    return response
+
+
+@app.route(
+    "/newsletter/unsubscribe/<token>",
+    methods=["GET", "POST"],
+)
+def newsletter_unsubscribe(token):
+    import hmac
+    import secrets
+
+    if not isinstance(token, str) or not 20 <= len(token) <= 200:
+        abort(404)
+
+    if request.method == "GET":
+        csrf_token = secrets.token_urlsafe(32)
+        session["newsletter_unsubscribe_csrf_token"] = csrf_token
+
+        response = app.make_response(
+            render_template(
+                "newsletter_unsubscribe.html",
+                result=None,
+                csrf_token=csrf_token,
+            )
+        )
+    else:
+        expected = session.get("newsletter_unsubscribe_csrf_token")
+        submitted = request.form.get("csrf_token", "")
+
+        if (
+            not isinstance(expected, str)
+            or not isinstance(submitted, str)
+            or not hmac.compare_digest(expected, submitted)
+        ):
+            abort(400, description="Invalid form token. Please reopen the link.")
+
+        session.pop("newsletter_unsubscribe_csrf_token", None)
+
+        try:
+            with newsletter_db_connect() as conn:
+                result = unsubscribe_subscription(conn, token)
+        except (sqlite3.Error, psycopg.Error):
+            app.logger.exception("Newsletter unsubscribe failed")
+            result = False
+            response = app.make_response(
+                render_template("newsletter_unsubscribe.html", result=result)
+            )
+            response.status_code = 500
+        else:
+            response = app.make_response(
+                render_template("newsletter_unsubscribe.html", result=result)
+            )
+
+    response.headers["Cache-Control"] = "no-store"
+    response.headers["Referrer-Policy"] = "no-referrer"
+    response.headers["X-Content-Type-Options"] = "nosniff"
+    return response
 
 
 @app.get("/go/search")

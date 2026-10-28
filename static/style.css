@@ -574,15 +574,24 @@
   padding: 24px 0;
   border-top: 1px solid #e7eaf0;
 }
-.info-footer .container,
-.trust-links {
+.info-footer .container {
   display: flex;
   flex-wrap: wrap;
+  justify-content: center;
+  align-items: center;
   gap: 14px 22px;
+  text-align: center;
 }
 .trust-links {
   margin-top: 14px;
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  align-items: center;
+  gap: 14px 22px;
+  text-align: center;
 }
+
 .trust-links a {
   font-size: .88rem;
   color: inherit;
