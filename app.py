@@ -749,6 +749,31 @@ def init_db():
             """
         )
 
+        conn.execute(
+            """
+            CREATE TABLE IF NOT EXISTS resend_sync_outbox (
+                id TEXT PRIMARY KEY,
+                email TEXT NOT NULL,
+                action TEXT NOT NULL
+                    CHECK (action IN ('add', 'unsubscribe')),
+                status TEXT NOT NULL DEFAULT 'pending'
+                    CHECK (
+                        status IN (
+                            'pending',
+                            'processing',
+                            'done',
+                            'failed'
+                        )
+                    ),
+                attempts INTEGER NOT NULL DEFAULT 0,
+                next_attempt_at TEXT NOT NULL,
+                last_error TEXT,
+                created_at TEXT NOT NULL,
+                updated_at TEXT NOT NULL
+            )
+            """
+        )
+
         # Add newsletter double-opt-in fields without rebuilding the table.
         subscriber_columns = {
             row["name"]
@@ -1593,16 +1618,24 @@ def newsletter_confirm(token):
         try:
             with newsletter_db_connect() as conn:
                 result = confirm_subscription(conn, token)
+
         except (sqlite3.Error, psycopg.Error):
             app.logger.exception("Newsletter confirmation failed")
             result = False
             response = app.make_response(
-                render_template("newsletter_confirm.html", result=result)
+                render_template(
+                    "newsletter_confirm.html",
+                    result=result,
+                )
             )
             response.status_code = 500
+
         else:
             response = app.make_response(
-                render_template("newsletter_confirm.html", result=result)
+                render_template(
+                    "newsletter_confirm.html",
+                    result=result,
+                )
             )
 
     response.headers["Cache-Control"] = "no-store"
@@ -1649,16 +1682,24 @@ def newsletter_unsubscribe(token):
         try:
             with newsletter_db_connect() as conn:
                 result = unsubscribe_subscription(conn, token)
+
         except (sqlite3.Error, psycopg.Error):
             app.logger.exception("Newsletter unsubscribe failed")
             result = False
             response = app.make_response(
-                render_template("newsletter_unsubscribe.html", result=result)
+                render_template(
+                    "newsletter_unsubscribe.html",
+                    result=result,
+                )
             )
             response.status_code = 500
+
         else:
             response = app.make_response(
-                render_template("newsletter_unsubscribe.html", result=result)
+                render_template(
+                    "newsletter_unsubscribe.html",
+                    result=result,
+                )
             )
 
     response.headers["Cache-Control"] = "no-store"

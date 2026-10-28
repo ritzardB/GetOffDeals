@@ -417,3 +417,38 @@ def test_signup_can_retry_after_confirmation_email_failure(
     assert row["unsubscribe_token_hash"] == hash_token(
         second_unsubscribe_token
     )
+
+
+def test_repeat_signup_does_not_reactivate_unsubscribed_contact(
+    monkeypatch, tmp_path
+):
+    setup_newsletter_db(monkeypatch, tmp_path)
+
+    with app_module.db_connect() as conn:
+        subscription = newsletter_service.prepare_subscription(
+            conn, "reader@example.com"
+        )
+
+        newsletter_service.confirm_subscription(
+            conn, subscription["confirmation_token"]
+        )
+
+        newsletter_service.unsubscribe_subscription(
+            conn, subscription["unsubscribe_token"]
+        )
+
+        repeated = newsletter_service.prepare_subscription(
+            conn, "reader@example.com"
+        )
+
+    assert repeated["status"] == "already_unsubscribed"
+
+    with app_module.db_connect() as conn:
+        row = conn.execute(
+            "SELECT status, consent FROM subscribers "
+            "WHERE email = ?",
+            ("reader@example.com",),
+        ).fetchone()
+
+    assert row["status"] == "unsubscribed"
+    assert row["consent"] == 0

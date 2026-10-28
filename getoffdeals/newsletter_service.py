@@ -76,6 +76,9 @@ def prepare_subscription(conn, email):
     if row and row["status"] == "confirmed":
         return {"status": "already_confirmed"}
 
+    if row and row["status"] == "unsubscribed":
+        return {"status": "already_unsubscribed"}
+
     confirmation_token, confirmation_hash = generate_token()
     unsubscribe_token, unsubscribe_hash = generate_token()
     now = utc_now()
@@ -119,12 +122,42 @@ def prepare_subscription(conn, email):
     }
 
 
+def get_confirmation_email(conn, token):
+    """Return the email associated with a confirmation token."""
+    token_hash = hash_token(token)
+    row = _execute(
+        conn,
+        """
+        SELECT email
+        FROM subscribers
+        WHERE confirmation_token_hash = %s
+        """,
+        (token_hash,),
+    ).fetchone()
+    return row["email"] if row else None
+
+
+def get_unsubscribe_email(conn, token):
+    """Return the email associated with an unsubscribe token."""
+    token_hash = hash_token(token)
+    row = _execute(
+        conn,
+        """
+        SELECT email
+        FROM subscribers
+        WHERE unsubscribe_token_hash = %s
+        """,
+        (token_hash,),
+    ).fetchone()
+    return row["email"] if row else None
+
+
 def confirm_subscription(conn, token):
     """Confirm a subscription using a valid, unexpired token."""
     row = _execute(
         conn,
         """
-        SELECT id, status, confirmation_expires_at
+        SELECT id, email, status, confirmation_expires_at
         FROM subscribers
         WHERE confirmation_token_hash = %s
         """,
@@ -137,7 +170,7 @@ def confirm_subscription(conn, token):
     if token_is_expired(row["confirmation_expires_at"]):
         return False
 
-    _execute(
+    cursor = _execute(
         conn,
         """
         UPDATE subscribers
@@ -146,15 +179,35 @@ def confirm_subscription(conn, token):
             confirmation_token_hash = NULL,
             confirmation_expires_at = NULL
         WHERE id = %s
+          AND status = 'pending'
         """,
         (utc_now(), row["id"]),
     )
+
+    if cursor.rowcount != 1:
+        return False
+
+    enqueue_resend_sync(conn, row["email"], "add")
     return True
 
 
 def unsubscribe_subscription(conn, token):
-    """Unsubscribe a confirmed subscriber; tokens can only be used once."""
-    cursor = _execute(
+    """Unsubscribe and queue Resend suppression atomically."""
+    row = _execute(
+        conn,
+        """
+        SELECT id, email
+        FROM subscribers
+        WHERE unsubscribe_token_hash = %s
+          AND status = 'confirmed'
+        """,
+        (hash_token(token),),
+    ).fetchone()
+
+    if not row:
+        return False
+
+    _execute(
         conn,
         """
         UPDATE subscribers
@@ -164,9 +217,70 @@ def unsubscribe_subscription(conn, token):
             unsubscribe_token_hash = NULL,
             confirmation_token_hash = NULL,
             confirmation_expires_at = NULL
-        WHERE unsubscribe_token_hash = %s
+        WHERE id = %s
           AND status = 'confirmed'
         """,
-        (utc_now(), hash_token(token)),
+        (utc_now(), row["id"]),
     )
-    return cursor.rowcount == 1
+
+    enqueue_resend_sync(conn, row["email"], "unsubscribe")
+    return True
+
+
+def get_confirmation_email(conn, token):
+    token_hash = hash_token(token)
+    row = _execute(
+        conn,
+        """
+        SELECT email
+        FROM subscribers
+        WHERE confirmation_token_hash = %s
+        """,
+        (token_hash,),
+    ).fetchone()
+
+    return row["email"] if row else None
+
+
+def get_unsubscribe_email(conn, token):
+    token_hash = hash_token(token)
+    row = _execute(
+        conn,
+        """
+        SELECT email
+        FROM subscribers
+        WHERE unsubscribe_token_hash = %s
+        """,
+        (token_hash,),
+    ).fetchone()
+
+    return row["email"] if row else None
+
+
+def enqueue_resend_sync(conn, email, action):
+    """Queue a Resend sync task in the current DB transaction."""
+    if action not in {"add", "unsubscribe"}:
+        raise ValueError("Unsupported Resend sync action.")
+
+    table = (
+        "resend_sync_outbox"
+        if isinstance(conn, sqlite3.Connection)
+        else "public.resend_sync_outbox"
+    )
+
+    now = utc_now()
+    job_id = secrets.token_urlsafe(18)
+
+    _execute(
+        conn,
+        f"""
+        INSERT INTO {table} (
+            id, email, action, status, attempts,
+            next_attempt_at, created_at, updated_at
+        )
+        VALUES (%s, %s, %s, 'pending', 0, %s, %s, %s)
+        """,
+        (job_id, email, action, now, now, now),
+    )
+
+    return job_id
