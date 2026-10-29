@@ -368,6 +368,7 @@ def supabase_auth_request(
     payload=None,
     method="POST",
     access_token=None,
+    params=None,
 ):
     """Call Supabase Auth without exposing credentials or response secrets."""
     base_url, headers = supabase_auth_config()
@@ -383,6 +384,7 @@ def supabase_auth_request(
             method,
             url,
             headers=headers,
+            params=params,
             json=payload,
             timeout=(5, 15),
             allow_redirects=False,
@@ -597,8 +599,6 @@ def forgot_password_page():
 
 @app.get("/reset-password")
 def reset_password_page():
-    if session.get("user_id"):
-        return redirect("/")
     return render_template("reset_password.html")
 
 @app.post("/auth/forgot-password")
@@ -625,11 +625,9 @@ def auth_forgot_password():
     try:
         _, error = supabase_auth_request(
             "recover",
-            payload={
-                "email": email,
-                "redirect_to": (
-                    "https://getoffdeals.com/reset-password"
-                ),
+            payload={"email": email},
+            params={
+                "redirect_to": "https://getoffdeals.com/reset-password"
             },
         )
     except RuntimeError:
