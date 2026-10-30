@@ -1,0 +1,40 @@
+
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Unsubscribe | GetOffDeals</title>
+</head>
+<body>
+  <main>
+    <h1>Email preferences</h1>
+
+    {% if result is none %}
+      <p>
+        If you no longer want to receive GetOffDeals invitations,
+        confirm below.
+      </p>
+
+    <form method="post">
+    <input
+        type="hidden"
+        name="csrf_token"
+        value="{{ csrf_token }}"
+    >
+    <button type="submit">Unsubscribe me</button>
+    </form>
+
+    {% elif result %}
+      <p>Your email address has been unsubscribed from invitations.</p>
+    {% else %}
+      <p>
+        This unsubscribe link is invalid, expired, or has already been used.
+        If you have already unsubscribed, no further action is needed.
+      </p>
+    {% endif %}
+
+    <p><a href="/">Return to GetOffDeals</a></p>
+  </main>
+</body>
+</html>

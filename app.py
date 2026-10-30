@@ -9,19 +9,77 @@ Aviasales tracking link configured in the environment.
 import os
 import re
 import sqlite3
+import psycopg
 import time
 from datetime import date
 from urllib.parse import quote
+from uuid import UUID
+
+from getoffdeals.database import get_connection
 
 import requests
 from dotenv import load_dotenv
-from flask import Flask, abort, jsonify, redirect, render_template, request
+from flask import Flask, abort, jsonify, redirect, render_template, request, session
 
+from getoffdeals.postgres_sessions import (
+    PostgresSessionInterface,
+    regenerate_session_id,
+)
+from getoffdeals.price_alerts import price_alerts_bp
+
+from getoffdeals.unsubscribe_routes import unsubscribe_bp
+
+from getoffdeals.email_service import send_newsletter_confirmation
+
+from getoffdeals.newsletter_service import (
+    prepare_subscription,
+    confirm_subscription,
+    unsubscribe_subscription,
+)
 
 load_dotenv()
 
 app = Flask(__name__)
+app.register_blueprint(price_alerts_bp)
+app.register_blueprint(unsubscribe_bp)
 app.config["JSON_SORT_KEYS"] = False
+
+
+def sync_authenticated_user(user_id, email, first_name="", last_name=""):
+    """Synchronize a Supabase Auth user into public.users."""
+    try:
+        normalized_id = str(UUID(str(user_id)))
+    except (ValueError, TypeError, AttributeError) as exc:
+        raise ValueError("Authenticated user ID must be a valid UUID.") from exc
+
+    if not isinstance(email, str) or not email.strip():
+        raise ValueError("Authenticated user email is required.")
+
+    with get_connection() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                """
+                INSERT INTO public.users (
+                    id, email, first_name, last_name,
+                    created_at, updated_at
+                )
+                VALUES (%s, %s, %s, %s, NOW(), NOW())
+                ON CONFLICT (id) DO UPDATE SET
+                    email = EXCLUDED.email,
+                    first_name = EXCLUDED.first_name,
+                    last_name = EXCLUDED.last_name,
+                    updated_at = NOW()
+                """,
+                (
+                    normalized_id,
+                    email.strip().lower(),
+                    first_name.strip() if isinstance(first_name, str) else "",
+                    last_name.strip() if isinstance(last_name, str) else "",
+                ),
+            )
+
+    return normalized_id
+
 
 # Secure server-side authentication session configuration.
 app.config["SECRET_KEY"] = os.getenv("FLASK_SECRET_KEY")
@@ -30,6 +88,9 @@ app.config["SESSION_COOKIE_SAMESITE"] = "Lax"
 app.config["SESSION_COOKIE_SECURE"] = (
     os.getenv("COOKIE_SECURE", "").lower() == "true"
 )
+
+# Store session contents in PostgreSQL; the browser cookie holds only a random ID.
+app.session_interface = PostgresSessionInterface()
 
 DB_PATH = os.getenv(
     "TAKEOFF_DB_PATH",
@@ -128,6 +189,7 @@ TRAVELPAYOUTS_ROUTES = [
         "emoji": "🇵🇭",
         "category": "homecoming",
         "note": "Reconnect with family, food and the places that feel like home.",
+        "image": "/static/images/manila.jpg",
     },
     {
         "origin": "AUH",
@@ -137,6 +199,7 @@ TRAVELPAYOUTS_ROUTES = [
         "emoji": "🌴",
         "category": "nature",
         "note": "Island hopping, clear water and a slower pace in the Visayas.",
+        "image": "/static/images/cebu.jpg",
     },
     {
         "origin": "DXB",
@@ -146,6 +209,7 @@ TRAVELPAYOUTS_ROUTES = [
         "emoji": "⛰️",
         "category": "homecoming",
         "note": "A useful gateway for Central Luzon and trips beyond the capital.",
+        "image": "/static/images/clark.jpg",
     },
     {
         "origin": "AUH",
@@ -154,7 +218,8 @@ TRAVELPAYOUTS_ROUTES = [
         "tag": "Beach escape",
         "emoji": "🏝️",
         "category": "nature",
-        "note": "Explore Aklan and nearby island destinations.",
+        "note": "Explore Boracay, Aklan and nearby island destinations.",
+        "image": "/static/images/boracay.jpg",
     },
     {
         "origin": "AUH",
@@ -164,6 +229,7 @@ TRAVELPAYOUTS_ROUTES = [
         "emoji": "🕌",
         "category": "city",
         "note": "Historic streets, waterfront views and lively markets.",
+        "image": "/static/images/turkeyi.jpg",
     },
     {
         "origin": "AUH",
@@ -173,6 +239,7 @@ TRAVELPAYOUTS_ROUTES = [
         "emoji": "🏔️",
         "category": "nature",
         "note": "Old-town cafés, mountain views and a change of scenery.",
+        "image": "/static/images/tbilisi.jpg",
     },
 ]
 
@@ -296,9 +363,20 @@ def supabase_auth_config():
     }
 
 
-def supabase_auth_request(endpoint, payload=None, method="POST"):
+def supabase_auth_request(
+    endpoint,
+    payload=None,
+    method="POST",
+    access_token=None,
+    params=None,
+):
     """Call Supabase Auth without exposing credentials or response secrets."""
     base_url, headers = supabase_auth_config()
+    headers = dict(headers)
+
+    if access_token:
+        headers["Authorization"] = f"Bearer {access_token}"
+
     url = f"{base_url}/auth/v1/{endpoint.lstrip('/')}"
 
     try:
@@ -306,6 +384,7 @@ def supabase_auth_request(endpoint, payload=None, method="POST"):
             method,
             url,
             headers=headers,
+            params=params,
             json=payload,
             timeout=(5, 15),
             allow_redirects=False,
@@ -324,9 +403,8 @@ def supabase_auth_request(endpoint, payload=None, method="POST"):
         data = {}
 
     if not response.ok:
-        message = data.get("msg") or data.get("message")
-        if response.status_code in (400, 401, 422) and isinstance(message, str):
-            return None, message[:200]
+        if response.status_code in (400, 401, 422):
+            return None, "Unable to authenticate. Check your details or verify your email."
         return None, "Supabase Auth could not complete the request."
 
     if not isinstance(data, dict):
@@ -334,15 +412,330 @@ def supabase_auth_request(endpoint, payload=None, method="POST"):
 
     return data, None
 
+@app.post("/auth/register")
+def auth_register():
+    """Register an account through Supabase; require email verification."""
+    if not request.is_json:
+        return jsonify(error="Send a JSON request."), 400
+
+    body = request.get_json(silent=True)
+    if not isinstance(body, dict):
+        return jsonify(error="Invalid request body."), 400
+
+
+    email = body.get("email")
+    password = body.get("password")
+    first_name = body.get("first_name")
+    last_name = body.get("last_name", "")
+
+    if not isinstance(email, str) or not isinstance(password, str):
+        return jsonify(error="Email and password are required."), 400
+
+    if not isinstance(first_name, str) or not isinstance(last_name, str):
+        return jsonify(error="Enter a valid name."), 400
+
+    email = email.strip().lower()
+    first_name = first_name.strip()
+    last_name = last_name.strip()
+
+    if not first_name or len(first_name) > 80 or len(last_name) > 80:
+        return jsonify(error="Enter a valid first and last name."), 400
+
+    if (
+        len(email) > 254
+        or not re.fullmatch(r"[^\s@]+@[^\s@]+\.[^\s@]+", email)
+    ):
+        return jsonify(error="Enter a valid email address."), 400
+
+    if len(password) < 8 or len(password) > 128:
+        return jsonify(error="Password must be between 8 and 128 characters."), 400
+
+    if not isinstance(email, str) or not isinstance(password, str):
+        return jsonify(error="Email and password are required."), 400
+
+    email = email.strip().lower()
+    if (
+        len(email) > 254
+        or not re.fullmatch(r"[^\s@]+@[^\s@]+\.[^\s@]+", email)
+    ):
+        return jsonify(error="Enter a valid email address."), 400
+
+    if len(password) < 8 or len(password) > 128:
+        return jsonify(error="Password must be between 8 and 128 characters."), 400
+
+    try:
+        data, error = supabase_auth_request(
+            "signup",
+            payload={
+                "email": email,
+                "password": password,
+                "data": {
+                    "first_name": first_name,
+                    "last_name": last_name,
+                },
+            }
+        )
+    except RuntimeError:
+        app.logger.error("Supabase Auth configuration is invalid")
+        return jsonify(error="Registration is temporarily unavailable."), 503
+
+    if error:
+        return jsonify(error=error), 400
+
+    # Never establish a logged-in session during registration.
+    # Supabase email confirmation must happen first.
+    return jsonify(
+        message=(
+            "If registration was accepted, check your email for a "
+            "verification link before signing in."
+        )
+    ), 202
+
+@app.post("/auth/login")
+def auth_login():
+    """Authenticate through Supabase and establish a server-side session."""
+
+    if not request.is_json:
+        return jsonify(error="Send a JSON request."), 400
+
+    body = request.get_json(silent=True)
+    if not isinstance(body, dict):
+        return jsonify(error="Invalid request body."), 400
+
+    email = body.get("email")
+    password = body.get("password")
+
+    if not isinstance(email, str) or not isinstance(password, str):
+        return jsonify(error="Email and password are required."), 400
+
+    email = email.strip().lower()
+    if (
+        len(email) > 254
+        or not re.fullmatch(r"[^\s@]+@[^\s@]+\.[^\s@]+", email)
+        or not password
+        or len(password) > 128
+    ):
+        return jsonify(error="Invalid email or password."), 400
+
+    try:
+        data, error = supabase_auth_request(
+            "token?grant_type=password",
+            payload={"email": email, "password": password},
+        )
+    except RuntimeError:
+        app.logger.error("Supabase Auth configuration is invalid")
+        return jsonify(error="Login is temporarily unavailable."), 503
+
+    if error or not isinstance(data, dict):
+        return jsonify(error="Invalid credentials or unverified email."), 401
+
+    user = data.get("user")
+    if not isinstance(user, dict) or not user.get("id"):
+        return jsonify(error="Unable to authenticate this account."), 401
+
+    if not (user.get("email_confirmed_at") or user.get("confirmed_at")):
+        return jsonify(error="Please verify your email before signing in."), 403
+
+    # Rotate the session ID to prevent session fixation.
+    try:
+        regenerate_session_id(session)
+    except Exception:
+        app.logger.exception("Could not rotate the login session")
+        return jsonify(error="Login is temporarily unavailable."), 503
+
+    session.clear()
+
+    session["user_id"] = user["id"]
+    session["email"] = user.get("email", email)
+
+    user_metadata = user.get("user_metadata")
+    if not isinstance(user_metadata, dict):
+        user_metadata = {}
+
+    session["first_name"] = (
+        user_metadata.get("first_name", "").strip()
+        if isinstance(user_metadata.get("first_name"), str)
+        else ""
+    )
+    session["last_name"] = (
+        user_metadata.get("last_name", "").strip()
+        if isinstance(user_metadata.get("last_name"), str)
+        else ""
+    )
+
+
+    try:
+        sync_authenticated_user(
+            user_id=session["user_id"],
+            email=session["email"],
+            first_name=session["first_name"],
+            last_name=session["last_name"],
+        )
+    except ValueError:
+        app.logger.warning("Supabase returned an invalid user ID or email.")
+        session.clear()
+        return jsonify(error="Unable to initialize your account."), 401
+    except Exception:
+        app.logger.exception("Could not synchronize authenticated user.")
+        session.clear()
+        return jsonify(error="Login is temporarily unavailable."), 503
+
+
+
+    return jsonify(
+        message="Login successful.",
+        user={
+            "id": session["user_id"],
+            "email": session["email"],
+        }
+    ), 200
+
+@app.get("/forgot-password")
+def forgot_password_page():
+    if session.get("user_id"):
+        return redirect("/")
+    return render_template("forgot_password.html")
+
+
+@app.get("/reset-password")
+def reset_password_page():
+    return render_template("reset_password.html")
+
+@app.post("/auth/forgot-password")
+def auth_forgot_password():
+    """Send a Supabase password recovery email."""
+    if not request.is_json:
+        return jsonify(error="Send a JSON request."), 400
+
+    body = request.get_json(silent=True)
+    if not isinstance(body, dict):
+        return jsonify(error="Invalid request body."), 400
+
+    email = body.get("email")
+    if not isinstance(email, str):
+        return jsonify(error="Enter a valid email address."), 400
+
+    email = email.strip().lower()
+    if (
+        len(email) > 254
+        or not re.fullmatch(r"[^\s@]+@[^\s@]+\.[^\s@]+", email)
+    ):
+        return jsonify(error="Enter a valid email address."), 400
+
+    try:
+        _, error = supabase_auth_request(
+            "recover",
+            payload={"email": email},
+            params={
+                "redirect_to": "https://getoffdeals.com/reset-password"
+            },
+        )
+    except RuntimeError:
+        app.logger.error("Supabase Auth configuration is invalid")
+        return jsonify(
+            error="Password recovery is temporarily unavailable."
+        ), 503
+
+    if error:
+        # Avoid revealing whether an account exists.
+        return jsonify(
+            message=(
+                "If an account exists for that email, "
+                "a password recovery link will be sent."
+            )
+        ), 200
+
+    return jsonify(
+        message=(
+            "If an account exists for that email, "
+            "a password recovery link will be sent."
+        )
+    ), 200
+
+
+@app.post("/auth/reset-password")
+def auth_reset_password():
+    """Set a new password using a Supabase recovery access token."""
+    if not request.is_json:
+        return jsonify(error="Send a JSON request."), 400
+
+    body = request.get_json(silent=True)
+    if not isinstance(body, dict):
+        return jsonify(error="Invalid request body."), 400
+
+    access_token = body.get("access_token")
+    password = body.get("password")
+
+    if (
+        not isinstance(access_token, str)
+        or not access_token.strip()
+        or len(access_token) > 8192
+    ):
+        return jsonify(
+            error="Your recovery link is invalid or expired. Request a new one."
+        ), 400
+
+    if (
+        not isinstance(password, str)
+        or len(password) < 8
+        or len(password) > 128
+    ):
+        return jsonify(
+            error="Password must be between 8 and 128 characters."
+        ), 400
+
+    try:
+        data, error = supabase_auth_request(
+            "user",
+            payload={"password": password},
+            method="PUT",
+            access_token=access_token,
+        )
+    except RuntimeError:
+        app.logger.error("Supabase Auth configuration is invalid")
+        return jsonify(
+            error="Password reset is temporarily unavailable."
+        ), 503
+
+    if error or not isinstance(data, dict) or not data.get("id"):
+        return jsonify(
+            error=(
+                "Your recovery link is invalid or expired. "
+                "Request a new one."
+            )
+        ), 400
+
+    return jsonify(
+        message="Your password has been updated. You can now sign in."
+    ), 200
+
+
+@app.post("/auth/logout")
+def auth_logout():
+    """Clear the session and redirect browser users home."""
+    session.clear()
+
+    # Regular browser form submissions should return to the homepage.
+    if "text/html" in request.headers.get("Accept", ""):
+        return redirect("/", code=303)
+
+    # Preserve the JSON response for API clients.
+    return jsonify(message="Logged out successfully."), 200
+
 
 def db_connect():
     conn = sqlite3.connect(DB_PATH)
     conn.row_factory = sqlite3.Row
     return conn
 
+def newsletter_db_connect():
+    """Connect to PostgreSQL for newsletter operations."""
+    return get_connection()
+
 
 def init_db():
     with db_connect() as conn:
+
         conn.execute(
             """
             CREATE TABLE IF NOT EXISTS subscribers (
@@ -351,6 +744,77 @@ def init_db():
                 consent INTEGER NOT NULL DEFAULT 0,
                 created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
             )
+            """
+        )
+
+        conn.execute(
+            """
+            CREATE TABLE IF NOT EXISTS resend_sync_outbox (
+                id TEXT PRIMARY KEY,
+                email TEXT NOT NULL,
+                action TEXT NOT NULL
+                    CHECK (action IN ('add', 'unsubscribe')),
+                status TEXT NOT NULL DEFAULT 'pending'
+                    CHECK (
+                        status IN (
+                            'pending',
+                            'processing',
+                            'done',
+                            'failed'
+                        )
+                    ),
+                attempts INTEGER NOT NULL DEFAULT 0,
+                next_attempt_at TEXT NOT NULL,
+                last_error TEXT,
+                created_at TEXT NOT NULL,
+                updated_at TEXT NOT NULL
+            )
+            """
+        )
+
+        # Add newsletter double-opt-in fields without rebuilding the table.
+        subscriber_columns = {
+            row["name"]
+            for row in conn.execute(
+                "PRAGMA table_info(subscribers)"
+            ).fetchall()
+        }
+
+        newsletter_columns = {
+            "status": (
+                "TEXT NOT NULL DEFAULT 'pending' "
+                "CHECK (status IN ('pending', 'confirmed', 'unsubscribed'))"
+            ),
+            "consent_at": "TEXT",
+            "confirmed_at": "TEXT",
+            "confirmation_token_hash": "TEXT",
+            "confirmation_expires_at": "TEXT",
+            "unsubscribe_token_hash": "TEXT",
+            "unsubscribed_at": "TEXT",
+        }
+
+        for column_name, column_definition in newsletter_columns.items():
+            if column_name not in subscriber_columns:
+                conn.execute(
+                    f"ALTER TABLE subscribers ADD COLUMN "
+                    f"{column_name} {column_definition}"
+                )
+
+        conn.execute(
+            """
+            CREATE UNIQUE INDEX IF NOT EXISTS
+            idx_subscribers_confirmation_token
+            ON subscribers (confirmation_token_hash)
+            WHERE confirmation_token_hash IS NOT NULL
+            """
+        )
+
+        conn.execute(
+            """
+            CREATE UNIQUE INDEX IF NOT EXISTS
+            idx_subscribers_unsubscribe_token
+            ON subscribers (unsubscribe_token_hash)
+            WHERE unsubscribe_token_hash IS NOT NULL
             """
         )
 
@@ -365,6 +829,35 @@ def init_db():
                 adults INTEGER NOT NULL,
                 created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
             )
+            """
+        )
+
+
+        conn.execute(
+            """
+            CREATE TABLE IF NOT EXISTS price_alerts (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                user_id TEXT NOT NULL,
+                origin TEXT NOT NULL,
+                destination TEXT NOT NULL,
+                departure_date TEXT NOT NULL,
+                return_date TEXT,
+                adults INTEGER NOT NULL DEFAULT 1,
+                currency TEXT NOT NULL DEFAULT 'AED',
+                target_price REAL NOT NULL,
+                is_active INTEGER NOT NULL DEFAULT 1,
+                last_notified_price REAL,
+                last_notified_at TEXT,
+                created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+            )
+            """
+        )
+
+        conn.execute(
+            """
+            CREATE INDEX IF NOT EXISTS idx_price_alerts_user_id
+            ON price_alerts (user_id)
             """
         )
 
@@ -469,6 +962,61 @@ def home():
 def flights():
     return render_template("flights.html")
 
+
+
+@app.get("/account")
+def account_page():
+    if not session.get("user_id"):
+        return redirect("/login")
+
+    alerts = []
+    try:
+        user_id = str(UUID(str(session["user_id"])))
+
+        with get_connection() as conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    """
+                    SELECT id, origin, destination, departure_date,
+                           return_date, adults, cabin_class, target_price,
+                           currency, is_active, created_at
+                    FROM public.flight_alerts
+                    WHERE user_id = %s
+                    ORDER BY created_at DESC
+                    """,
+                    (user_id,),
+                )
+                alerts = cur.fetchall()
+
+    except ValueError:
+        # Mock or invalid session IDs cannot identify PostgreSQL alerts.
+        alerts = []
+    except Exception:
+        app.logger.exception("Could not load price alerts for account page.")
+        alerts = []
+
+    return render_template(
+        "account.html",
+        first_name=session.get("first_name", "").strip(),
+        email=session.get("email", ""),
+        alerts=alerts,
+    )
+
+
+@app.get("/login")
+def login_page():
+    if session.get("user_id"):
+        return redirect("/")
+    return render_template("login.html")
+
+
+@app.get("/register")
+def register_page():
+    if session.get("user_id"):
+        return redirect("/")
+    return render_template("register.html")
+
+
 # Trust and transparency pages
 @app.get("/about")
 def about():
@@ -501,7 +1049,7 @@ def about():
             ),
             (
                 "Contact",
-                "Questions or feedback? Email inforichapps@gmail.com.",
+                "Questions or feedback? Email info@getoffdeals.com.",
             ),
         ],
     )
@@ -518,7 +1066,7 @@ def contact():
             (
                 "Get in touch",
                 "For questions, feedback, corrections, or business inquiries, "
-                "email us at inforichapps@gmail.com.",
+                "email us at info@getoffdeals.com.",
             ),
             (
                 "Before booking",
@@ -529,7 +1077,6 @@ def contact():
             ),
         ],
     )
-
 
 @app.get("/privacy")
 def privacy():
@@ -572,15 +1119,14 @@ def privacy():
                 "We should retain personal information only as needed for "
                 "the purpose for which it was collected and applicable "
                 "obligations. To ask about information you submitted to us, "
-                "email inforichapps@gmail.com.",
+                "email info@getoffdeals.com.",
             ),
             (
                 "Contact",
-                "For privacy questions, contact inforichapps@gmail.com.",
+                "For privacy questions, contact info@getoffdeals.com.",
             ),
         ],
     )
-
 
 @app.get("/terms")
 def terms():
@@ -625,7 +1171,7 @@ def terms():
             (
                 "Contact",
                 "Questions about these terms can be sent to "
-                "inforichapps@gmail.com.",
+                "info@getoffdeals.com.",
             ),
         ],
     )
@@ -667,7 +1213,7 @@ def affiliate_disclosure():
             (
                 "Contact",
                 "For questions about this disclosure, email "
-                "inforichapps@gmail.com.",
+                "info@getoffdeals.com.",
             ),
         ],
     )
@@ -953,70 +1499,211 @@ def search_flights():
 def newsletter_signup():
     payload = request.get_json(silent=True) or request.form
 
-    email = str(
-        payload.get("email", "")
-    ).strip().lower()
-
-    consent = payload.get("consent") in (
-        True,
-        "true",
-        "on",
-        "1",
-        1,
-    )
+    email = str(payload.get("email", "")).strip().lower()
+    consent = payload.get("consent") in (True, "true", "on", "1", 1)
 
     if (
         len(email) > 254
         or not re.fullmatch(r"[^\s@]+@[^\s@]+\.[^\s@]+", email)
     ):
-        return jsonify(
-            {"error": "Enter a valid email address."}
-        ), 400
+        return jsonify({"error": "Enter a valid email address."}), 400
 
     if not consent:
-        return jsonify(
-            {
-                "error": (
-                    "Please confirm you agree to receive "
-                    "GetOffDeals fare updates."
-                )
-            }
-        ), 400
+        return jsonify({
+            "error": (
+                "Please confirm you agree to receive "
+                "GetOffDeals fare updates."
+            )
+        }), 400
+
+    public_base_url = os.getenv("PUBLIC_BASE_URL", "").strip().rstrip("/")
+    if not public_base_url.startswith("https://"):
+        app.logger.error("PUBLIC_BASE_URL must be configured with HTTPS.")
+        return jsonify({
+            "error": "Newsletter signup is temporarily unavailable."
+        }), 503
 
     try:
-        with db_connect() as conn:
-            conn.execute(
-                """
-                INSERT INTO subscribers (email, consent)
-                VALUES (?, 1)
-                ON CONFLICT(email)
-                DO UPDATE SET consent=1
-                """,
-                (email,),
-            )
+        with newsletter_db_connect() as conn:
+            subscription = prepare_subscription(conn, email)
 
-    except sqlite3.Error:
-        app.logger.exception(
-            "Could not save newsletter subscription"
+        if subscription["status"] == "already_confirmed":
+            return jsonify({
+                "message": (
+                    "This address is already subscribed to GetOffDeals "
+                    "fare updates."
+                )
+            }), 200
+
+        confirmation_token = subscription["confirmation_token"]
+
+        confirmation_url = (
+            f"{public_base_url}/newsletter/confirm/{confirmation_token}"
         )
 
-        return jsonify(
-            {
-                "error": (
-                    "Signup could not be saved right now. "
-                    "Please try again later."
-                )
-            }
-        ), 500
+        unsubscribe_url = (
+            f"{public_base_url}/newsletter/unsubscribe/"
+            f"{subscription['unsubscribe_token']}"
+        )
 
-    return jsonify(
-        {
-            "message": (
-                "You're on the list! Email delivery is not connected yet, "
-                "but your signup has been saved."
+        send_newsletter_confirmation(
+            email,
+            confirmation_url,
+            unsubscribe_url,
+        )
+
+    except (sqlite3.Error, psycopg.Error):
+        app.logger.exception("Could not save newsletter subscription")
+        return jsonify({
+            "error": (
+                "Signup could not be saved right now. "
+                "Please try again later."
             )
-        }
-    ), 201
+        }), 500
+    except Exception:
+        app.logger.exception("Could not send newsletter confirmation")
+        return jsonify({
+            "error": (
+                "We couldn't send your confirmation email right now. "
+                "Please try again later."
+            )
+        }), 503
+
+    return jsonify({
+        "message": (
+            "Please check your email and click the confirmation link "
+            "to complete your GetOffDeals subscription."
+        )
+    }), 202
+
+
+
+@app.route(
+    "/newsletter/confirm/<token>",
+    methods=["GET", "POST"],
+)
+def newsletter_confirm(token):
+    import hmac
+    import secrets
+
+    if not isinstance(token, str) or not 20 <= len(token) <= 200:
+        abort(404)
+
+    if request.method == "GET":
+        csrf_token = secrets.token_urlsafe(32)
+        session["newsletter_confirm_csrf_token"] = csrf_token
+
+        response = app.make_response(
+            render_template(
+                "newsletter_confirm.html",
+                result=None,
+                csrf_token=csrf_token,
+            )
+        )
+    else:
+        expected = session.get("newsletter_confirm_csrf_token")
+        submitted = request.form.get("csrf_token", "")
+
+        if (
+            not isinstance(expected, str)
+            or not isinstance(submitted, str)
+            or not hmac.compare_digest(expected, submitted)
+        ):
+            abort(400, description="Invalid form token. Please reopen the link.")
+
+        session.pop("newsletter_confirm_csrf_token", None)
+
+        try:
+            with newsletter_db_connect() as conn:
+                result = confirm_subscription(conn, token)
+
+        except (sqlite3.Error, psycopg.Error):
+            app.logger.exception("Newsletter confirmation failed")
+            result = False
+            response = app.make_response(
+                render_template(
+                    "newsletter_confirm.html",
+                    result=result,
+                )
+            )
+            response.status_code = 500
+
+        else:
+            response = app.make_response(
+                render_template(
+                    "newsletter_confirm.html",
+                    result=result,
+                )
+            )
+
+    response.headers["Cache-Control"] = "no-store"
+    response.headers["Referrer-Policy"] = "no-referrer"
+    response.headers["X-Content-Type-Options"] = "nosniff"
+    return response
+
+
+@app.route(
+    "/newsletter/unsubscribe/<token>",
+    methods=["GET", "POST"],
+)
+def newsletter_unsubscribe(token):
+    import hmac
+    import secrets
+
+    if not isinstance(token, str) or not 20 <= len(token) <= 200:
+        abort(404)
+
+    if request.method == "GET":
+        csrf_token = secrets.token_urlsafe(32)
+        session["newsletter_unsubscribe_csrf_token"] = csrf_token
+
+        response = app.make_response(
+            render_template(
+                "newsletter_unsubscribe.html",
+                result=None,
+                csrf_token=csrf_token,
+            )
+        )
+    else:
+        expected = session.get("newsletter_unsubscribe_csrf_token")
+        submitted = request.form.get("csrf_token", "")
+
+        if (
+            not isinstance(expected, str)
+            or not isinstance(submitted, str)
+            or not hmac.compare_digest(expected, submitted)
+        ):
+            abort(400, description="Invalid form token. Please reopen the link.")
+
+        session.pop("newsletter_unsubscribe_csrf_token", None)
+
+        try:
+            with newsletter_db_connect() as conn:
+                result = unsubscribe_subscription(conn, token)
+
+        except (sqlite3.Error, psycopg.Error):
+            app.logger.exception("Newsletter unsubscribe failed")
+            result = False
+            response = app.make_response(
+                render_template(
+                    "newsletter_unsubscribe.html",
+                    result=result,
+                )
+            )
+            response.status_code = 500
+
+        else:
+            response = app.make_response(
+                render_template(
+                    "newsletter_unsubscribe.html",
+                    result=result,
+                )
+            )
+
+    response.headers["Cache-Control"] = "no-store"
+    response.headers["Referrer-Policy"] = "no-referrer"
+    response.headers["X-Content-Type-Options"] = "nosniff"
+    return response
 
 
 @app.get("/go/search")

@@ -7,3 +7,4 @@ python-dotenv>=1.0,<2.0
 psycopg[binary]>=3.2,<4.0
 
 Flask-Session>=0.8,<1.0
+resend==2.50.0

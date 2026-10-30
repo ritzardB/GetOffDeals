@@ -1,0 +1,63 @@
+
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#101b2b">
+  <title>Sign In | GetOffDeals</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=Manrope:wght@600;700;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body class="auth-page">
+  <header class="nav-wrap">
+    <nav class="nav container">
+      <a class="brand" href="/">
+        <span class="brand-mark">↗</span> GetOffDeals <span class="brand-dot">.</span>
+      </a>
+      <a class="nav-cta" href="/register">Create account ↗</a>
+    </nav>
+  </header>
+
+  <main class="auth-main container">
+    <section class="auth-card">
+      <span class="auth-eyebrow">WELCOME BACK</span>
+      <h1>Sign in and <em>take off.</em></h1>
+      <p class="auth-intro">Sign in to your GetOffDeals account.
+      Best viewed in modern browsers for optimal experience.</p>
+
+      <form id="login-form">
+        <label for="email">Email address</label>
+        <input id="email" name="email" type="email"
+               autocomplete="email" required maxlength="254">
+
+        <label for="password">Password</label>
+        <input id="password" name="password" type="password"
+               autocomplete="current-password" required maxlength="128">
+
+        <button class="button button-dark auth-submit" type="submit">
+          Sign in <span>↗</span>
+        </button>
+        <p id="auth-status" class="auth-status" role="status" aria-live="polite"></p>
+      </form>
+
+
+<p class="auth-switch">
+  New to GetOffDeals?
+  <a href="/register">Create an account</a>
+  </p>
+
+  <p class="auth-switch">
+    <a href="{{ url_for('forgot_password_page') }}">Forgot your password?</a>
+  </p>
+
+  <a class="auth-home" href="/">← Back to home</a>
+
+    </section>
+  </main>
+
+  <script src="{{ url_for('static', filename='auth.js') }}" defer></script>
+</body>
+</html>

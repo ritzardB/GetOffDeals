@@ -62,7 +62,7 @@ def about():
             ("Our mission", "GetOffDeals helps Filipino travellers in the UAE and the Philippines discover flight deals and travel inspiration in one convenient place."),
             ("How we work", "We aim to make researching travel options easier. Prices and examples displayed on the site may be illustrative and are not guaranteed live fares or available offers. Always confirm the final price, baggage rules, schedule, and booking conditions with the airline or booking provider."),
             ("How we may earn", "Some links may be affiliate links. If you book through a qualifying link, we may earn a commission at no additional cost to you. Affiliate relationships do not guarantee that an offer is the cheapest available."),
-            ("Contact", "Questions or feedback? Email inforichapps@gmail.com.")
+            ("Contact", "Questions or feedback? Email info@getoffdeals.com.")
         ]
     )
 
@@ -75,7 +75,7 @@ def contact():
         page_heading="Contact Us",
         updated="October 15, 2026",
         content=[
-            ("Get in touch", "For questions, feedback, corrections, or business inquiries, email us at inforichapps@gmail.com."),
+            ("Get in touch", "For questions, feedback, corrections, or business inquiries, email us at info@getoffdeals.com."),
             ("Before booking", "GetOffDeals does not issue airline tickets unless explicitly stated. Your booking, payment, cancellation, and refund arrangements are handled by the airline or booking provider you choose.")
         ]
     )
@@ -93,8 +93,8 @@ def privacy():
             ("How information may be used", "Information may be used to respond to inquiries, operate and improve the website, prevent abuse, and provide features you request."),
             ("Cookies and analytics", "The website or its service providers may use cookies or similar technologies for site functionality, traffic measurement, or affiliate attribution if those services are enabled. The exact technologies depend on the services configured on the live site."),
             ("Affiliate links and third parties", "When you follow a link to an airline, travel agency, or affiliate partner, that provider's website and privacy policy apply. We do not control third-party websites or their data practices."),
-            ("Data retention and your choices", "We should retain personal information only as needed for the purpose for which it was collected and applicable obligations. To ask about information you submitted to us, email inforichapps@gmail.com."),
-            ("Contact", "For privacy questions, contact inforichapps@gmail.com.")
+            ("Data retention and your choices", "We should retain personal information only as needed for the purpose for which it was collected and applicable obligations. To ask about information you submitted to us, email info@getoffdeals.com."),
+            ("Contact", "For privacy questions, contact info@getoffdeals.com.")
         ]
     )
 
@@ -112,7 +112,7 @@ def terms():
             ("Third-party bookings", "Bookings made through external providers are subject to their terms, fees, policies, and conditions. The provider is responsible for its booking service, ticket issuance, and applicable changes, cancellations, and refunds."),
             ("No guarantee", "We make reasonable efforts to keep website information useful, but we do not guarantee that every listing is complete, current, accurate, or available."),
             ("Changes", "We may update these terms as the website develops. Continued use after changes are published means you should review the updated terms."),
-            ("Contact", "Questions about these terms can be sent to inforichapps@gmail.com.")
+            ("Contact", "Questions about these terms can be sent to info@getoffdeals.com.")
         ]
     )
 
@@ -129,7 +129,7 @@ def affiliate_disclosure():
             ("Your price", "An affiliate commission generally does not add a separate charge to your booking, although the price and conditions are set by the provider."),
             ("Editorial independence", "Affiliate participation does not guarantee that a provider or offer is the best choice for every traveller. Compare the total price, baggage allowance, payment fees, cancellation rules, and other conditions before booking."),
             ("Price transparency", "Prices used in demonstrations or sample deal cards may be illustrative rather than live offers. Always check the current fare on the provider's website."),
-            ("Contact", "For questions about this disclosure, email inforichapps@gmail.com.")
+            ("Contact", "For questions about this disclosure, email info@getoffdeals.com.")
         ]
     )
 
@@ -161,7 +161,7 @@ info_template = '''<!doctype html>
         <p>{{ paragraph }}</p>
       </section>
     {% endfor %}
-    <p class="info-contact">Contact: <a href="mailto:inforichapps@gmail.com">inforichapps@gmail.com</a></p>
+    <p class="info-contact">Contact: <a href="mailto:info@getoffdeals.com">info@getoffdeals.com</a></p>
   </main>
   <footer class="info-footer">
     <div class="container">

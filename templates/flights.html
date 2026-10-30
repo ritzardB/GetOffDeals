@@ -66,7 +66,7 @@
     (function () {
       window.TPWL_CONFIGURATION = {
         ...window.TPWL_CONFIGURATION,
-        resultsURL: "https://getoffdeals.onrender.com/flights"
+        resultsURL: "{{ request.host_url.rstrip('/') }}/flights"
       };
 
       var script = document.createElement("script");

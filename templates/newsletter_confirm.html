@@ -1,0 +1,54 @@
+
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Newsletter confirmation | GetOffDeals</title>
+  <style>
+    body {
+      margin: 0;
+      padding: 32px 16px;
+      background: #f6f8f4;
+      color: #17202a;
+      font-family: Arial, sans-serif;
+      line-height: 1.6;
+    }
+    main {
+      max-width: 560px;
+      margin: 40px auto;
+      padding: 28px;
+      background: #fff;
+      border-radius: 12px;
+    }
+    button {
+      padding: 12px 18px;
+      border: 0;
+      border-radius: 6px;
+      background: #c8f169;
+      color: #14202b;
+      font-weight: bold;
+      cursor: pointer;
+    }
+  </style>
+</head>
+<body>
+  <main>
+    {% if result is none %}
+      <h1>Confirm your subscription</h1>
+      <p>Click below to confirm that you want to receive GetOffDeals fare updates.</p>
+      <form method="post">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+      <button type="submit">Confirm my subscription</button>
+      </form>
+    {% elif result %}
+      <h1>You're confirmed!</h1>
+      <p>Your email address is confirmed for GetOffDeals fare updates.</p>
+    {% else %}
+      <h1>Link unavailable</h1>
+      <p>This confirmation link is invalid, expired, or already used. You can request a new confirmation from the GetOffDeals homepage.</p>
+    {% endif %}
+    <p><a href="/">Return to GetOffDeals</a></p>
+  </main>
+</body>
+</html>

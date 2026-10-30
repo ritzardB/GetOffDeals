@@ -1,0 +1,32 @@
+
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Newsletter preferences | GetOffDeals</title>
+</head>
+<body>
+  <main>
+    {% if result is none %}
+      <h1>Email preferences</h1>
+      <p>Confirm below if you no longer want to receive GetOffDeals fare updates.</p>
+
+      <form method="post">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+        <button type="submit">Unsubscribe me</button>
+      </form>
+
+    {% elif result %}
+      <h1>You've been unsubscribed</h1>
+      <p>You will no longer receive GetOffDeals newsletter updates.</p>
+
+    {% else %}
+      <h1>Link unavailable</h1>
+      <p>This unsubscribe link is invalid or has already been used.</p>
+    {% endif %}
+
+    <p><a href="/">Return to GetOffDeals</a></p>
+  </main>
+</body>
+</html>
