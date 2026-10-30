@@ -252,12 +252,10 @@ def run_batch(db_connect, limit=BATCH_SIZE):
 
 
 def main():
-    # Import here to avoid a module-level app/worker import cycle.
-    from app import newsletter_db_connect
+    from getoffdeals.database import get_connection
 
-    count = run_batch(newsletter_db_connect)
+    count = run_batch(get_connection)
     logger.info("Resend sync worker processed %s jobs", count)
-
 
 if __name__ == "__main__":
     logging.basicConfig(level=logging.INFO)
