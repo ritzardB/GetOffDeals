@@ -2,6 +2,8 @@ name: GetOffDeals Resend Contact Sync
 
 on:
   workflow_dispatch:
+  schedule:
+    - cron: "*/10 * * * *"
 
 permissions:
   contents: read
