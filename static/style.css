@@ -153,6 +153,71 @@
   min-height:500px
 }
 
+/* Travel Stories button beside the primary hero action */
+.travel-stories-shortcut {
+  position: static;
+  z-index: 1;
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  flex: 0 0 auto;
+  min-height: 54px;
+  padding: 12px 17px;
+  background: transparent;
+  color: #fff;
+  border: 1px solid var(--lime);
+  border-radius: 8px;
+  text-decoration: none;
+  box-shadow: none;
+  transition:
+    background .2s ease,
+    color .2s ease,
+    border-color .2s ease,
+    transform .2s ease;
+}
+
+.travel-stories-shortcut:hover {
+  background: var(--lime);
+  color: var(--navy);
+  border-color: var(--lime);
+  transform: translateY(-2px);
+}
+
+.travel-stories-icon {
+  display: grid;
+  place-items: center;
+  width: 24px;
+  height: 24px;
+  flex-shrink: 0;
+  font-size: 20px;
+}
+
+.travel-stories-text {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.travel-stories-text strong {
+  font: 800 13px Manrope, sans-serif;
+}
+
+.travel-stories-text small {
+  font-size: 9px;
+  color: #c1cbd3;
+  transition: color .2s ease;
+}
+
+.travel-stories-shortcut:hover .travel-stories-text small {
+  color: #40502a;
+}
+
+.travel-stories-arrow {
+  margin-left: 5px;
+  font-size: 17px;
+  flex-shrink: 0;
+}
+
 .hero-copy{
   padding:0 0 38px;
   position:relative;
@@ -197,7 +262,8 @@
 .hero-actions{
     display:flex;
     align-items:center;
-    gap:26px;
+    flex-wrap:wrap;
+    gap:14px;
     margin-top:29px
   }
 
@@ -1051,7 +1117,7 @@ body.welcome-modal-open {
 }
 
 
-/* Destination photography — keeps the existing card layout */
+/* Destination photography â€” keeps the existing card layout */
 .deal-visual.has-image {
   isolation: isolate;
   background-color: #d9e1d2;
@@ -1915,7 +1981,7 @@ body.welcome-modal-open {
     font-weight: 600;
 }
 
-/* Delete button — apply only if the button has this class */
+/* Delete button â€” apply only if the button has this class */
 #price-alerts-section button.delete-btn {
     color: #FFFFFF;
     background-color: #B91C1C;
@@ -1924,4 +1990,22 @@ body.welcome-modal-open {
 
 #price-alerts-section button.delete-btn:hover {
     background-color: #991B1B;
+}
+
+
+/* Keep the two hero actions tidy on narrow screens */
+@media (max-width: 650px) {
+  .hero-actions {
+    align-items: flex-start;
+    gap: 12px;
+  }
+
+  .hero-actions .travel-stories-shortcut {
+    min-height: 50px;
+    padding: 10px 13px;
+  }
+
+  .hero-actions .travel-stories-text small {
+    font-size: 8px;
+  }
 }

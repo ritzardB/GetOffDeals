@@ -1,0 +1,97 @@
+
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#101b2b">
+  <title>Travel Stories | GetOffDeals</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/travel_stories.css') }}">
+</head>
+<body>
+<header class="nav-wrap">
+  <nav class="nav container">
+    <a class="brand" href="/">GetOffDeals <span class="brand-dot">.</span></a>
+    <div class="nav-links">
+      <a href="/">Home</a>
+      <a href="/flights">Find a flight</a>
+      <a href="/travel-stories">Travel Stories</a>
+      {% if session.get("user_id") %}
+        <a href="/travel-stories/create">Write a Story</a>
+        <a href="/account">My Account</a>
+      {% else %}
+        <a href="/login">Sign in</a>
+      {% endif %}
+    </div>
+  </nav>
+</header>
+
+<main class="stories-container">
+  <section class="stories-hero">
+    <span class="stories-kicker">REAL PEOPLE · REAL JOURNEYS</span>
+    <h1>Every journey has a story.</h1>
+    <p>Discover travel experiences, hidden places and unforgettable adventures shared by fellow travellers.</p>
+    {% if session.get("user_id") %}
+      <a class="stories-button" href="/travel-stories/create">Share your story</a>
+    {% else %}
+      <a class="stories-button" href="/register">Join our community</a>
+    {% endif %}
+  </section>
+
+  <section class="stories-feed">
+    <div class="stories-section-heading">
+      <div>
+        <span class="stories-kicker">COMMUNITY JOURNAL</span>
+        <h2>Latest travel stories</h2>
+      </div>
+      <span>{{ stories|length }} stories</span>
+    </div>
+
+    {% if stories %}
+      <div class="stories-grid">
+        {% for story in stories %}
+          <article class="story-card">
+            {% if story.cover_image_path %}
+              <div class="story-card-image">
+                <img
+                  src="{{ url_for(
+                      'travel_stories.story_image',
+                      story_id=story.id,
+                      filename=story.cover_image_path.rsplit('/', 1)[-1]
+                  ) }}"
+                  alt="Travel in {{ story.destination }}"
+                  loading="lazy"
+                >
+              </div>
+            {% else %}
+              <div class="story-card-placeholder" aria-hidden="true">✈</div>
+            {% endif %}
+            <div class="story-card-content">
+              <span class="story-location">{{ story.destination }}, {{ story.country }}</span>
+              <h3>
+                <a href="{{ url_for('travel_stories.story_detail', slug=story.slug) }}">
+                  {{ story.title }}
+                </a>
+              </h3>
+              <p>{{ story.content[:180] }}{% if story.content|length > 180 %}…{% endif %}</p>
+              <a class="story-read-link" href="{{ url_for('travel_stories.story_detail', slug=story.slug) }}">Read story →</a>
+            </div>
+          </article>
+        {% endfor %}
+      </div>
+    {% else %}
+      <div class="stories-empty">
+        <h3>Our first travel story is waiting.</h3>
+        <p>Be the first member to share an adventure with the community.</p>
+        {% if session.get("user_id") %}
+          <a href="/travel-stories/create">Write the first story</a>
+        {% else %}
+          <a href="/register">Create your account</a>
+        {% endif %}
+      </div>
+    {% endif %}
+  </section>
+</main>
+</body>
+</html>

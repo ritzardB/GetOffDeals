@@ -1,0 +1,575 @@
+
+/* GetOffDeals Travel Stories */
+
+:root {
+    --ink: #111e2d;
+    --navy: #101b2b;
+    --lime: #d7f36a;
+    --paper: #f7f7f2;
+    --muted: #747d87;
+    --line: #e2e5df;
+    --white: #fff;
+    --orange: #ff8059;
+}
+
+.stories-container,
+.story-detail-container,
+.story-form-container {
+  width: min(1120px, calc(100% - 40px));
+  margin: 0 auto;
+  padding: 48px 0 90px;
+}
+
+.stories-hero {
+  padding: 76px 32px;
+  text-align: center;
+  border-radius: 28px;
+  background: linear-gradient(135deg, #101b2b, #203c50);
+  color: #fff;
+}
+
+.stories-kicker {
+  display: inline-block;
+  color: #a9e65b;
+  font-size: 12px;
+  font-weight: 800;
+  letter-spacing: 2px;
+  text-transform: uppercase;
+}
+
+.stories-hero h1,
+.story-form-heading h1 {
+  margin: 18px 0;
+  font-size: clamp(36px, 6vw, 64px);
+  line-height: 1.08;
+}
+
+.stories-hero p,
+.story-form-heading p {
+  max-width: 650px;
+  margin: 0 auto 28px;
+  color: #d7e0e9;
+  line-height: 1.8;
+}
+
+.stories-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 14px 24px;
+  border: 0;
+  border-radius: 999px;
+  background: #d7f36a;
+  color: #101b2b;
+  font-weight: 800;
+  text-decoration: none;
+  cursor: pointer;
+}
+
+.stories-button:hover {
+  background: #c9f58b;
+  transform: translateY(-1px);
+}
+
+.stories-feed {
+  padding-top: 64px;
+}
+
+.stories-section-heading {
+  display: flex;
+  justify-content: space-between;
+  align-items: end;
+  gap: 20px;
+  margin-bottom: 28px;
+}
+
+.stories-section-heading h2 {
+  margin: 8px 0 0;
+  color: #101b2b;
+  font-size: 32px;
+}
+
+.stories-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 24px;
+}
+
+.story-card {
+  overflow: hidden;
+  border: 1px solid #e2e5df;
+  border-radius: 20px;
+  background: #fff;
+  box-shadow: 0 8px 28px rgba(16, 27, 43, 0.06);
+}
+
+.story-card-image,
+.story-card-placeholder {
+  height: 210px;
+  background: #eaf0f5;
+}
+
+.story-card-image img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.story-card-placeholder {
+  display: grid;
+  place-items: center;
+  color: #203c50;
+  font-size: 48px;
+}
+
+.story-card-content {
+  padding: 24px;
+}
+
+.story-location {
+  color: #648b32;
+  font-size: 12px;
+  font-weight: 800;
+  letter-spacing: 1px;
+  text-transform: uppercase;
+}
+
+.story-card h3 {
+  margin: 12px 0;
+  font-size: 21px;
+  line-height: 1.35;
+}
+
+.story-card h3 a {
+  color: #101b2b;
+  text-decoration: none;
+}
+
+.story-card p {
+  color: #747d87;
+  line-height: 1.7;
+}
+
+.story-read-link,
+.story-back-link {
+  color: #557d25;
+  font-weight: 800;
+  text-decoration: none;
+}
+
+.stories-empty {
+  padding: 60px 24px;
+  border: 1px dashed #bdc9d4;
+  border-radius: 20px;
+  text-align: center;
+}
+
+.stories-empty p {
+  color: #747d87;
+}
+
+.stories-empty a {
+  color: #557d25;
+  font-weight: 800;
+}
+
+.story-detail-container {
+  max-width: 850px;
+}
+
+.story-article {
+  margin-top: 32px;
+}
+
+.story-article h1 {
+  margin: 14px 0;
+  color: #101b2b;
+  font-size: clamp(34px, 6vw, 54px);
+  line-height: 1.15;
+}
+
+.story-published {
+  color: #8793a1;
+  font-size: 14px;
+}
+
+.story-detail-image {
+  width: 100%;
+  max-height: 500px;
+  margin: 30px 0;
+  border-radius: 22px;
+  object-fit: cover;
+}
+
+.story-article-content {
+  color: #344255;
+  font-size: 17px;
+  line-height: 1.95;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.story-community-note {
+  margin-top: 64px;
+  padding: 36px;
+  border-radius: 22px;
+  background: #f1f6eb;
+  text-align: center;
+}
+
+.story-form-container {
+  max-width: 800px;
+}
+
+.story-form-heading {
+  margin: 36px 0;
+  text-align: center;
+}
+
+.story-form-heading h1 {
+  color: #101b2b;
+}
+
+.story-form-heading p {
+  color: #747d87;
+}
+
+.story-form {
+  display: grid;
+  gap: 14px;
+  padding: 36px;
+  border: 1px solid #e2e5df;
+  border-radius: 22px;
+  background: #fff;
+  box-shadow: 0 8px 28px rgba(16, 27, 43, 0.05);
+}
+
+.story-form label {
+  color: #203044;
+  font-size: 14px;
+  font-weight: 800;
+}
+
+.story-form input,
+.story-form textarea {
+  width: 100%;
+  padding: 14px;
+  border: 1px solid #d8e0e8;
+  border-radius: 12px;
+  background: #fbfcfd;
+  color: #101b2b;
+  font: inherit;
+  box-sizing: border-box;
+}
+
+.story-form textarea {
+  resize: vertical;
+  line-height: 1.7;
+}
+
+.story-form input:focus,
+.story-form textarea:focus {
+  outline: 2px solid #a9e65b;
+  border-color: #7ba93d;
+}
+
+.story-form-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 18px;
+}
+
+.story-form-row > div {
+  display: grid;
+  gap: 10px;
+}
+
+.story-form-hint {
+  color: #8793a1;
+  font-size: 13px;
+}
+
+#story-form-message {
+  min-height: 24px;
+  color: #557d25;
+  font-weight: 700;
+}
+
+@media (max-width: 760px) {
+  .stories-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .stories-hero {
+    padding: 56px 22px;
+  }
+
+  .story-form-row {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 520px) {
+  .stories-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .stories-section-heading {
+    align-items: start;
+    flex-direction: column;
+  }
+
+  .story-form {
+    padding: 22px;
+  }
+}
+
+
+
+/* =========================================
+   Travel Stories - Community Comments
+========================================= */
+
+.story-comments {
+    margin-top: 64px;
+    padding: 36px;
+    border: 1px solid var(--line);
+    border-radius: 22px;
+    background: var(--white);
+    box-shadow: 0 8px 28px rgba(16, 27, 43, 0.05);
+}
+
+.comments-heading {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 20px;
+    margin-bottom: 30px;
+}
+
+.comments-heading h2 {
+    margin: 10px 0;
+    color: var(--navy);
+    font-size: clamp(26px, 4vw, 34px);
+}
+
+.comments-heading p {
+    margin: 0;
+    color: var(--muted);
+    line-height: 1.7;
+}
+
+.comment-count {
+    flex-shrink: 0;
+    padding: 9px 14px;
+    border-radius: 999px;
+    background: #f1f6eb;
+    color: #557d25;
+    font-size: 13px;
+    font-weight: 800;
+}
+
+.comment-list {
+    display: grid;
+    gap: 18px;
+}
+
+.comments-loading,
+.comments-empty,
+.comment-error {
+    padding: 24px;
+    border-radius: 14px;
+    background: var(--paper);
+    color: var(--muted);
+    text-align: center;
+    line-height: 1.7;
+}
+
+.comment-error {
+    color: #b42318;
+}
+
+.comment-thread {
+    display: grid;
+    gap: 12px;
+}
+
+.comment-card {
+    padding: 20px;
+    border: 1px solid var(--line);
+    border-radius: 16px;
+    background: #fff;
+}
+
+.comment-card-reply {
+    background: var(--paper);
+}
+
+.comment-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    flex-wrap: wrap;
+    gap: 8px;
+}
+
+.comment-author {
+    color: var(--navy);
+    font-size: 14px;
+}
+
+.comment-date {
+    color: var(--muted);
+    font-size: 12px;
+}
+
+.comment-content {
+    margin: 14px 0;
+    color: #344255;
+    line-height: 1.75;
+    white-space: pre-wrap;
+    overflow-wrap: anywhere;
+}
+
+.comment-actions {
+    display: flex;
+    align-items: center;
+    gap: 16px;
+}
+
+.comment-action-button {
+    padding: 4px 0;
+    border: 0;
+    background: transparent;
+    color: #557d25;
+    font: inherit;
+    font-size: 13px;
+    font-weight: 800;
+    cursor: pointer;
+}
+
+.comment-action-button:hover {
+    text-decoration: underline;
+}
+
+.comment-delete-button {
+    color: #b42318;
+}
+
+.comment-replies {
+    display: grid;
+    gap: 12px;
+    margin-left: 38px;
+    padding-left: 18px;
+    border-left: 3px solid var(--lime);
+}
+
+.comment-form {
+    display: grid;
+    gap: 12px;
+    margin-top: 30px;
+    padding-top: 28px;
+    border-top: 1px solid var(--line);
+}
+
+.comment-form label {
+    color: var(--navy);
+    font-weight: 800;
+}
+
+.comment-form textarea,
+.reply-input {
+    width: 100%;
+    box-sizing: border-box;
+    padding: 14px;
+    border: 1px solid #d8e0e8;
+    border-radius: 12px;
+    background: #fbfcfd;
+    color: var(--ink);
+    font: inherit;
+    line-height: 1.7;
+    resize: vertical;
+}
+
+.comment-form textarea:focus,
+.reply-input:focus {
+    outline: 2px solid var(--lime);
+    border-color: #7ba93d;
+}
+
+.comment-form-footer,
+.reply-form-actions {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    flex-wrap: wrap;
+    gap: 12px;
+}
+
+.comment-character-count {
+    color: var(--muted);
+    font-size: 12px;
+}
+
+.comment-message {
+    margin: 0;
+    color: #b42318;
+    font-size: 14px;
+    font-weight: 700;
+}
+
+.comment-message.success {
+    color: #557d25;
+}
+
+.reply-form {
+    display: grid;
+    gap: 12px;
+    margin-top: 18px;
+}
+
+.reply-form-actions {
+    justify-content: flex-end;
+}
+
+.reply-submit {
+    padding: 10px 18px;
+}
+
+.comment-signin {
+    margin-top: 30px;
+    padding: 28px;
+    border-radius: 16px;
+    background: var(--paper);
+    text-align: center;
+}
+
+.comment-signin h3 {
+    margin-top: 0;
+    color: var(--navy);
+}
+
+.comment-signin p {
+    margin-bottom: 20px;
+    color: var(--muted);
+}
+
+@media (max-width: 600px) {
+    .story-comments {
+        padding: 22px;
+    }
+
+    .comments-heading {
+        align-items: flex-start;
+        flex-direction: column;
+    }
+
+    .comment-replies {
+        margin-left: 12px;
+        padding-left: 12px;
+    }
+
+    .comment-card {
+        padding: 16px;
+    }
+}

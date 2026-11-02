@@ -1,0 +1,129 @@
+
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{{ story.title }} | GetOffDeals Travel Stories</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/travel_stories.css') }}">
+  <meta name="description" content="{{ story.content[:155] }}">
+</head>
+<body>
+<header class="nav-wrap">
+  <nav class="nav container">
+    <a class="brand" href="/">GetOffDeals <span class="brand-dot">.</span></a>
+    <div class="nav-links">
+      <a href="/">Home</a>
+      <a href="/travel-stories">All Stories</a>
+      <a href="/flights">Find a flight</a>
+    </div>
+  </nav>
+</header>
+
+<main class="story-detail-container">
+  <a class="story-back-link" href="/travel-stories">← Back to travel stories</a>
+
+  <article class="story-article">
+    <span class="story-location">{{ story.destination }}, {{ story.country }}</span>
+    <h1>{{ story.title }}</h1>
+
+    <p class="story-published">
+      Published {{ story.published_at.strftime("%d %B %Y") if story.published_at else "" }}
+    </p>
+
+    {% if story.cover_image_path %}
+      <img
+        class="story-detail-image"
+        src="{{ url_for(
+            'travel_stories.story_image',
+            story_id=story.id,
+            filename=story.cover_image_path.rsplit('/', 1)[-1]
+        ) }}"
+        alt="Travel in {{ story.destination }}"
+      >
+    {% endif %}
+
+    {% if gallery_images %}
+      <section class="story-gallery" aria-label="Travel story photos">
+        <h2>More photos from this journey</h2>
+
+        <div class="story-gallery-grid">
+          {% for image in gallery_images %}
+            <img
+              src="{{ url_for(
+                  'travel_stories.story_image',
+                  story_id=story.id,
+                  filename=image.storage_path.rsplit('/', 1)[-1]
+              ) }}"
+              alt="Photo {{ loop.index }} from {{ story.destination }}"
+              loading="lazy"
+            >
+          {% endfor %}
+        </div>
+      </section>
+    {% endif %}
+
+    <div class="story-article-content">{{ story.content }}</div>
+  </article>
+
+  <section
+    class="story-comments"
+    id="story-comments"
+    data-story-id="{{ story.id }}"
+    data-authenticated="{{ 'true' if is_authenticated else 'false' }}"
+    data-csrf-token="{{ csrf_token }}"
+  >
+    <div class="comments-heading">
+      <div>
+        <span class="stories-kicker">Community</span>
+        <h2>Join the conversation</h2>
+        <p>Share your thoughts and connect with fellow travellers.</p>
+      </div>
+      <span id="comment-count" class="comment-count">Comments</span>
+    </div>
+
+    <div id="comment-list" class="comment-list" aria-live="polite">
+      <p class="comments-loading">Loading comments...</p>
+    </div>
+
+    {% if is_authenticated %}
+      <form id="story-comment-form" class="comment-form">
+        <label for="story-comment-content">Write a comment</label>
+        <textarea
+          id="story-comment-content"
+          name="content"
+          rows="4"
+          maxlength="5000"
+          placeholder="What did you think about this journey?"
+          required
+        ></textarea>
+
+        <div class="comment-form-footer">
+          <span class="comment-character-count">Maximum 5,000 characters</span>
+          <button type="submit" class="stories-button">
+            Post comment
+          </button>
+        </div>
+
+        <p id="comment-form-message" role="status" hidden></p>
+      </form>
+    {% else %}
+      <div class="comment-signin">
+        <h3>Have something to share?</h3>
+        <p>Sign in to comment and join the conversation.</p>
+        <a class="stories-button" href="{{ url_for('login_page') }}">Sign in</a>
+      </div>
+    {% endif %}
+  </section>
+
+  <section class="story-community-note">
+    <h2>Inspired by this journey?</h2>
+    <p>Discover your next adventure and share your own travel experience.</p>
+    <a class="stories-button" href="/flights">Explore flights</a>
+  </section>
+</main>
+
+<script src="{{ url_for('static', filename='js/travel_stories.js') }}" defer></script>
+</body>
+</html>

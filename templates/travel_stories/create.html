@@ -1,0 +1,88 @@
+
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Write a Travel Story | GetOffDeals</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/travel_stories.css') }}">
+</head>
+<body>
+<header class="nav-wrap">
+  <nav class="nav container">
+    <a class="brand" href="/">GetOffDeals <span class="brand-dot">.</span></a>
+    <div class="nav-links">
+      <a href="/travel-stories">All Stories</a>
+      <a href="/account">My Account</a>
+    </div>
+  </nav>
+</header>
+
+<main class="story-form-container">
+  <a class="story-back-link" href="/travel-stories">← Back to stories</a>
+
+  <section class="story-form-heading">
+    <span class="stories-kicker">YOUR JOURNEY MATTERS</span>
+    <h1>Share your travel story.</h1>
+    <p>Tell the community about the places you've visited and the experiences you'll never forget.</p>
+  </section>
+
+  <form id="travel-story-form" class="story-form">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+
+    <label for="title">Story title</label>
+    <input id="title" name="title" type="text" minlength="5" maxlength="180" required placeholder="My unforgettable trip to Tokyo">
+
+    <div class="story-form-row">
+      <div>
+        <label for="destination">Destination</label>
+        <input id="destination" name="destination" type="text" minlength="2" maxlength="150" required placeholder="Tokyo">
+      </div>
+      <div>
+        <label for="country">Country</label>
+        <input id="country" name="country" type="text" minlength="2" maxlength="100" required placeholder="Japan">
+      </div>
+    </div>
+
+    <section class="story-upload-section">
+      <label for="cover_image">Cover photo (optional)</label>
+      <input
+        id="cover_image"
+        name="cover_image"
+        type="file"
+        accept="image/jpeg,image/png,image/webp"
+      >
+      <p class="story-form-hint">
+        Choose one JPEG, PNG or WebP image. Maximum size: 5 MB.
+      </p>
+    </section>
+
+    <section class="story-upload-section">
+      <label for="gallery_images">Additional photos (optional)</label>
+      <input
+        id="gallery_images"
+        name="gallery_images"
+        type="file"
+        accept="image/jpeg,image/png,image/webp"
+        multiple
+      >
+      <p class="story-form-hint">
+        You can select up to 10 additional photos. Maximum 5 MB each.
+      </p>
+    </section>
+
+
+    <label for="content">Your story</label>
+    <textarea id="content" name="content" minlength="50" maxlength="50000" rows="12" required placeholder="Tell us about your experience..."></textarea>
+
+    <p class="story-form-hint">Minimum 50 characters. Please share your own experiences and respect other travellers.</p>
+
+    <button class="stories-button" type="submit">Publish my story</button>
+    <p id="story-form-message" role="status" aria-live="polite"></p>
+  </form>
+</main>
+
+<script src="{{ url_for('static', filename='js/travel_stories.js') }}" defer></script>
+</body>
+</html>

@@ -22,8 +22,6 @@
         Hi, {{ session.get('first_name')|e }} 👋
       </span>
     {% endif %}
-
-    
     <div class="nav-links">
       <a href="#deals">
         <svg class="nav-icon" viewBox="0 0 24 24" aria-hidden="true">
@@ -87,7 +85,6 @@
       Find a flight <span>↗</span>
     </a>
     {% endif %}
-
     <button
       class="menu-toggle"
       type="button"
@@ -127,6 +124,14 @@
         <p class="hero-sub">Flight inspiration for Filipinos flying between the UAE and the Philippines—plus city breaks and island escapes worth saving for.</p>
         <div class="hero-actions">
           <a class="button button-lime" href="#deals">Explore flight deals <span>↘</span></a>
+          <a class="travel-stories-shortcut" href="/travel-stories">
+          <span class="travel-stories-icon" aria-hidden="true">▤</span>
+          <span class="travel-stories-text">
+            <strong>Travel Stories</strong>
+            <small>Explore journeys & experiences</small>
+          </span>
+          <span class="travel-stories-arrow" aria-hidden="true">↗</span>
+        </a>
           <div class="social-proof">
             <div class="avatar-stack">
             <i>✈</i>
