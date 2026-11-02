@@ -45,11 +45,17 @@
     {% endif %}
 
     {% if gallery_images %}
-      <section class="story-gallery" aria-label="Travel story photos">
-        <h2>More photos from this journey</h2>
+  <section
+    class="story-gallery"
+    id="story-gallery"
+    aria-label="Travel story photo gallery"
+  >
+    <h2>More photos from this journey</h2>
 
-        <div class="story-gallery-grid">
-          {% for image in gallery_images %}
+    <div class="story-carousel">
+      <div class="story-carousel-track">
+        {% for image in gallery_images %}
+          <div class="story-carousel-slide">
             <img
               src="{{ url_for(
                   'travel_stories.story_image',
@@ -57,12 +63,46 @@
                   filename=image.storage_path.rsplit('/', 1)[-1]
               ) }}"
               alt="Photo {{ loop.index }} from {{ story.destination }}"
-              loading="lazy"
+              {% if loop.first %}fetchpriority="high"{% else %}loading="lazy"{% endif %}
             >
+          </div>
+        {% endfor %}
+      </div>
+
+      {% if gallery_images|length > 1 %}
+        <button
+          type="button"
+          class="story-carousel-arrow story-carousel-prev"
+          aria-label="Previous photo"
+        >&#10094;</button>
+
+        <button
+          type="button"
+          class="story-carousel-arrow story-carousel-next"
+          aria-label="Next photo"
+        >&#10095;</button>
+
+        <div
+          class="story-carousel-indicators"
+          aria-label="Choose a photo"
+        >
+          {% for image in gallery_images %}
+            <button
+              type="button"
+              class="story-carousel-dot{% if loop.first %} active{% endif %}"
+              aria-label="Show photo {{ loop.index }}"
+              aria-current="{{ 'true' if loop.first else 'false' }}"
+            ></button>
           {% endfor %}
         </div>
-      </section>
-    {% endif %}
+      {% endif %}
+
+      <span class="story-carousel-counter" aria-live="off">
+        1 / {{ gallery_images|length }}
+      </span>
+    </div>
+  </section>
+{% endif %}
 
     <div class="story-article-content">{{ story.content }}</div>
   </article>

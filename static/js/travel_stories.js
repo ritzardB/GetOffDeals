@@ -2,8 +2,8 @@
 document.addEventListener("DOMContentLoaded", () => {
     initStoryPublishing();
     initStoryComments();
+    initStoryGallery();
 });
-
 
 function initStoryPublishing() {
     const form = document.querySelector("#travel-story-form");
@@ -482,4 +482,158 @@ function initStoryComments() {
     }
 
     loadComments();
+}
+
+function initStoryGallery() {
+    const gallery = document.querySelector("#story-gallery");
+
+    if (!gallery) return;
+
+    const track = gallery.querySelector(".story-carousel-track");
+    const slides = Array.from(
+        gallery.querySelectorAll(".story-carousel-slide")
+    );
+
+    const previousButton = gallery.querySelector(
+        ".story-carousel-prev"
+    );
+
+    const nextButton = gallery.querySelector(
+        ".story-carousel-next"
+    );
+
+    const dots = Array.from(
+        gallery.querySelectorAll(".story-carousel-dot")
+    );
+
+    const counter = gallery.querySelector(
+        ".story-carousel-counter"
+    );
+
+    if (!track || slides.length === 0) return;
+
+    if (slides.length === 1) return;
+
+    const INTERVAL = 3000;
+
+    const reducedMotion = window.matchMedia(
+        "(prefers-reduced-motion: reduce)"
+    );
+
+    let currentIndex = 0;
+    let timer = null;
+    let isHovered = false;
+    let isFocused = false;
+
+    function updateCarousel() {
+        track.style.transform =
+            `translateX(-${currentIndex * 100}%)`;
+
+        dots.forEach((dot, index) => {
+            const active = index === currentIndex;
+
+            dot.classList.toggle("active", active);
+
+            dot.setAttribute(
+                "aria-current",
+                active ? "true" : "false"
+            );
+        });
+
+        if (counter) {
+            counter.textContent =
+                `${currentIndex + 1} / ${slides.length}`;
+        }
+    }
+
+    function showSlide(index) {
+        currentIndex =
+            (index + slides.length) % slides.length;
+
+        updateCarousel();
+    }
+
+    function stopAutoPlay() {
+        if (timer !== null) {
+            window.clearInterval(timer);
+            timer = null;
+        }
+    }
+
+    function startAutoPlay() {
+        stopAutoPlay();
+
+        if (
+            reducedMotion.matches ||
+            isHovered ||
+            isFocused ||
+            document.hidden
+        ) {
+            return;
+        }
+
+        timer = window.setInterval(() => {
+            showSlide(currentIndex + 1);
+        }, INTERVAL);
+    }
+
+    function manualNavigation(index) {
+        showSlide(index);
+        startAutoPlay();
+    }
+
+    if (previousButton) {
+        previousButton.addEventListener("click", () => {
+            manualNavigation(currentIndex - 1);
+        });
+    }
+
+    if (nextButton) {
+        nextButton.addEventListener("click", () => {
+            manualNavigation(currentIndex + 1);
+        });
+    }
+
+    dots.forEach((dot, index) => {
+        dot.addEventListener("click", () => {
+            manualNavigation(index);
+        });
+    });
+
+    gallery.addEventListener("mouseenter", () => {
+        isHovered = true;
+        stopAutoPlay();
+    });
+
+    gallery.addEventListener("mouseleave", () => {
+        isHovered = false;
+        startAutoPlay();
+    });
+
+    gallery.addEventListener("focusin", () => {
+        isFocused = true;
+        stopAutoPlay();
+    });
+
+    gallery.addEventListener("focusout", event => {
+        if (!gallery.contains(event.relatedTarget)) {
+            isFocused = false;
+            startAutoPlay();
+        }
+    });
+
+    document.addEventListener("visibilitychange", () => {
+        if (document.hidden) {
+            stopAutoPlay();
+        } else {
+            startAutoPlay();
+        }
+    });
+
+    reducedMotion.addEventListener("change", () => {
+        startAutoPlay();
+    });
+
+    updateCarousel();
+    startAutoPlay();
 }
