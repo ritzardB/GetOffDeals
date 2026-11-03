@@ -2235,3 +2235,45 @@ body.welcome-modal-open {
     height: 180px;
   }
 }
+
+/* =====================================
+   Official GetOffDeals Logo
+   ===================================== */
+
+.brand {
+  display: inline-flex;
+  align-items: center;
+  flex-shrink: 0;
+  text-decoration: none;
+}
+
+.brand-logo {
+  display: block;
+  width: auto;
+  height: 58px;
+  max-width: 230px;
+  object-fit: contain;
+}
+
+.footer-brand .brand-logo {
+  height: 48px;
+  max-width: 210px;
+}
+
+@media (max-width: 900px) {
+  .brand-logo {
+    height: 48px;
+    max-width: 190px;
+  }
+}
+
+@media (max-width: 600px) {
+  .brand-logo {
+    height: 42px;
+    max-width: 155px;
+  }
+
+  .footer-brand .brand-logo {
+    height: 40px;
+  }
+}
