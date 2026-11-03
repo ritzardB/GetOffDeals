@@ -298,21 +298,41 @@ def my_stories():
         stories = service.list_member_stories(user_id)
     except Exception:
         current_app.logger.exception("Could not load member stories.")
-        return jsonify(error="Unable to load your stories."), 500
+        return jsonify(error="Unable to load member stories."), 500
 
-    return jsonify(
-        stories=[
-            {
-                "id": str(story["id"]),
-                "title": story["title"],
-                "slug": story["slug"],
-                "destination": story["destination"],
-                "country": story["country"],
-                "status": story["status"],
-            }
-            for story in stories
-        ]
-    ), 200
+    story_items = []
+
+    for story in stories:
+        story_id = str(story["id"])
+        cover_image_url = None
+        cover_image_path = story.get("cover_image_path")
+
+        if cover_image_path:
+            image_path = Path(str(cover_image_path))
+
+            if (
+                image_path.parent.name == story_id
+                and image_path.name not in {"", ".", ".."}
+                and "/" not in image_path.name
+                and "\\" not in image_path.name
+            ):
+                cover_image_url = url_for(
+                    "travel_stories.story_image",
+                    story_id=story_id,
+                    filename=image_path.name,
+                )
+
+        story_items.append({
+            "id": story_id,
+            "title": story["title"],
+            "slug": story["slug"],
+            "destination": story["destination"],
+            "country": story["country"],
+            "status": story["status"],
+            "cover_image_url": cover_image_url,
+        })
+
+    return jsonify(stories=story_items), 200
 
 
 @travel_stories_bp.delete("/api/travel-stories/<story_id>")
@@ -331,7 +351,13 @@ def story_delete(story_id):
         return jsonify(error="Invalid story ID."), 400
 
     try:
-        deleted = service.delete_story(user_id, story_id)
+        deleted = service.delete_story(
+            user_id,
+            story_id,
+            upload_root=current_app.config.get(
+                "TRAVEL_STORIES_UPLOAD_FOLDER"
+            ),
+        )
     except Exception:
         current_app.logger.exception("Could not delete travel story.")
         return jsonify(error="Unable to delete your story."), 500

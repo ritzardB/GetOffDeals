@@ -45,6 +45,8 @@ from getoffdeals.newsletter_invitation_service import (
     restore_invitation,
 )
 
+from getoffdeals.travel_stories.validators import generate_csrf_token
+
 load_dotenv()
 
 app = Flask(__name__)
@@ -1067,6 +1069,7 @@ def account_page():
         first_name=session.get("first_name", "").strip(),
         email=session.get("email", ""),
         alerts=alerts,
+        csrf_token=generate_csrf_token(session),
     )
 
 

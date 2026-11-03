@@ -1,11 +1,14 @@
 
 """PostgreSQL service operations for Travel Stories."""
 
+import logging
 from uuid import UUID, uuid4
 
 from getoffdeals.database import get_connection
 from getoffdeals.travel_stories import storage
 from getoffdeals.travel_stories.validators import make_slug
+
+logger = logging.getLogger(__name__)
 
 class StoryDailyLimitReached(Exception):
     """Raised when a member exceeds the daily publishing limit."""
@@ -425,8 +428,12 @@ def update_story(user_id, story_id, values):
             return dict(row) if row else None
 
 
-def delete_story(user_id, story_id):
-    """Delete a story only when it belongs to the authenticated member."""
+def delete_story(user_id, story_id, upload_root=None):
+    """
+    Delete a member-owned story and clean up its stored images.
+
+    Database deletion is committed before physical files are removed.
+    """
     user_id = _canonical_user_id(user_id)
 
     try:
@@ -434,8 +441,48 @@ def delete_story(user_id, story_id):
     except (ValueError, TypeError, AttributeError):
         return False
 
+    image_paths = []
+
+    # First, collect image paths and delete the story in one transaction.
     with get_connection() as conn:
         with conn.cursor() as cur:
+            cur.execute(
+                """
+                SELECT id, cover_image_path
+                FROM public.travel_stories
+                WHERE id = %s
+                  AND user_id = %s
+                FOR UPDATE
+                """,
+                (story_id, user_id),
+            )
+
+            story = cur.fetchone()
+
+            if not story:
+                return False
+
+            if story.get("cover_image_path"):
+                image_paths.append(story["cover_image_path"])
+
+            cur.execute(
+                """
+                SELECT storage_path
+                FROM public.story_images
+                WHERE story_id = %s
+                ORDER BY position ASC, created_at ASC
+                """,
+                (story_id,),
+            )
+
+            gallery_images = cur.fetchall()
+
+            image_paths.extend(
+                image["storage_path"]
+                for image in gallery_images
+                if image.get("storage_path")
+            )
+
             cur.execute(
                 """
                 DELETE FROM public.travel_stories
@@ -445,7 +492,44 @@ def delete_story(user_id, story_id):
                 """,
                 (story_id, user_id),
             )
-            return cur.fetchone() is not None
+
+            deleted = cur.fetchone()
+
+            if not deleted:
+                return False
+
+    # The database transaction has now committed.
+    # Only now should we remove physical image files.
+    if image_paths and not upload_root:
+        logger.warning(
+            "Story %s was deleted, but image cleanup was skipped: "
+            "upload directory is not configured.",
+            story_id,
+        )
+        return True
+
+    for image_path in dict.fromkeys(image_paths):
+        try:
+            removed = storage.delete_story_image(
+                image_path,
+                upload_root,
+            )
+
+            if not removed:
+                logger.warning(
+                    "Could not remove image %s for deleted story %s.",
+                    image_path,
+                    story_id,
+                )
+
+        except Exception:
+            logger.exception(
+                "Image cleanup failed for deleted story %s: %s",
+                story_id,
+                image_path,
+            )
+
+    return True
 
 
 def create_comment(user_id, story_id, values):

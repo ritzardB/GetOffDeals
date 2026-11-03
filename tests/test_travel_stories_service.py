@@ -198,23 +198,82 @@ def test_update_story_returns_none_for_invalid_id(fake_database):
     cursor.execute.assert_not_called()
 
 
-def test_delete_story_restricts_to_owner(fake_database):
+def test_delete_story_restricts_to_owner(fake_database, monkeypatch, tmp_path):
     cursor, _ = fake_database
-    cursor.fetchone.return_value = {"id": STORY_ID}
 
-    result = service.delete_story(USER_ID, STORY_ID)
+    cursor.fetchone.side_effect = [
+        {
+            "id": STORY_ID,
+            "cover_image_path": f"{STORY_ID}/cover.jpg",
+        },
+        {"id": STORY_ID},
+    ]
+
+    cursor.fetchall.return_value = [
+        {"storage_path": f"{STORY_ID}/gallery-1.jpg"},
+        {"storage_path": f"{STORY_ID}/gallery-2.jpg"},
+    ]
+
+    deleted_paths = []
+
+    def fake_delete_image(path, upload_root):
+        deleted_paths.append(path)
+        return True
+
+    monkeypatch.setattr(
+        service.storage,
+        "delete_story_image",
+        fake_delete_image,
+    )
+
+    result = service.delete_story(
+        USER_ID,
+        STORY_ID,
+        upload_root=str(tmp_path),
+    )
 
     assert result is True
 
-    sql = cursor.execute.call_args.args[0]
+    assert deleted_paths == [
+        f"{STORY_ID}/cover.jpg",
+        f"{STORY_ID}/gallery-1.jpg",
+        f"{STORY_ID}/gallery-2.jpg",
+    ]
 
-    assert "DELETE FROM public.travel_stories" in sql
-    assert "WHERE id = %s" in sql
-    assert "AND user_id = %s" in sql
+    sql_statements = [
+        call.args[0]
+        for call in cursor.execute.call_args_list
+    ]
 
-    params = cursor.execute.call_args.args[1]
-    assert params == (STORY_ID, USER_ID)
+    assert "FOR UPDATE" in sql_statements[0]
+    assert "public.story_images" in sql_statements[1]
+    assert "DELETE FROM public.travel_stories" in sql_statements[2]
 
+def test_delete_story_does_not_remove_files_when_not_owned(
+    fake_database,
+    monkeypatch,
+    tmp_path,
+):
+    cursor, _ = fake_database
+    cursor.fetchone.return_value = None
+
+    def should_not_delete(*args, **kwargs):
+        raise AssertionError("Image deletion must not run")
+
+    monkeypatch.setattr(
+        service.storage,
+        "delete_story_image",
+        should_not_delete,
+    )
+
+    result = service.delete_story(
+        OTHER_USER_ID,
+        STORY_ID,
+        upload_root=str(tmp_path),
+    )
+
+    assert result is False
+    assert cursor.execute.call_count == 1
 
 def test_delete_story_returns_false_for_invalid_id(fake_database):
     cursor, _ = fake_database
@@ -375,3 +434,4 @@ def test_create_story_cleans_up_images_when_gallery_save_fails(
 
     assert saved_paths == [f"{STORY_ID}/cover.jpg"]
     assert deleted_paths == saved_paths
+
