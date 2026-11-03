@@ -32,4 +32,7 @@ CREATE INDEX IF NOT EXISTS idx_welcome_email_outbox_pending
     ON public.welcome_email_outbox (status, next_attempt_at)
     WHERE status IN ('pending', 'processing');
 
+ALTER TABLE public.welcome_email_outbox
+    ENABLE ROW LEVEL SECURITY;
+
 COMMIT;
