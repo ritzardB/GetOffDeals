@@ -153,6 +153,71 @@
   min-height:500px
 }
 
+/* Travel Stories button beside the primary hero action */
+.travel-stories-shortcut {
+  position: static;
+  z-index: 1;
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  flex: 0 0 auto;
+  min-height: 54px;
+  padding: 12px 17px;
+  background: transparent;
+  color: #fff;
+  border: 1px solid var(--lime);
+  border-radius: 8px;
+  text-decoration: none;
+  box-shadow: none;
+  transition:
+    background .2s ease,
+    color .2s ease,
+    border-color .2s ease,
+    transform .2s ease;
+}
+
+.travel-stories-shortcut:hover {
+  background: var(--lime);
+  color: var(--navy);
+  border-color: var(--lime);
+  transform: translateY(-2px);
+}
+
+.travel-stories-icon {
+  display: grid;
+  place-items: center;
+  width: 24px;
+  height: 24px;
+  flex-shrink: 0;
+  font-size: 20px;
+}
+
+.travel-stories-text {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.travel-stories-text strong {
+  font: 800 13px Manrope, sans-serif;
+}
+
+.travel-stories-text small {
+  font-size: 9px;
+  color: #c1cbd3;
+  transition: color .2s ease;
+}
+
+.travel-stories-shortcut:hover .travel-stories-text small {
+  color: #40502a;
+}
+
+.travel-stories-arrow {
+  margin-left: 5px;
+  font-size: 17px;
+  flex-shrink: 0;
+}
+
 .hero-copy{
   padding:0 0 38px;
   position:relative;
@@ -197,7 +262,8 @@
 .hero-actions{
     display:flex;
     align-items:center;
-    gap:26px;
+    flex-wrap:wrap;
+    gap:14px;
     margin-top:29px
   }
 
@@ -1051,7 +1117,7 @@ body.welcome-modal-open {
 }
 
 
-/* Destination photography — keeps the existing card layout */
+/* Destination photography â€” keeps the existing card layout */
 .deal-visual.has-image {
   isolation: isolate;
   background-color: #d9e1d2;
@@ -1915,7 +1981,7 @@ body.welcome-modal-open {
     font-weight: 600;
 }
 
-/* Delete button — apply only if the button has this class */
+/* Delete button â€” apply only if the button has this class */
 #price-alerts-section button.delete-btn {
     color: #FFFFFF;
     background-color: #B91C1C;
@@ -1924,4 +1990,290 @@ body.welcome-modal-open {
 
 #price-alerts-section button.delete-btn:hover {
     background-color: #991B1B;
+}
+
+
+/* Keep the two hero actions tidy on narrow screens */
+@media (max-width: 650px) {
+  .hero-actions {
+    align-items: flex-start;
+    gap: 12px;
+  }
+
+  .hero-actions .travel-stories-shortcut {
+    min-height: 50px;
+    padding: 10px 13px;
+  }
+
+  .hero-actions .travel-stories-text small {
+    font-size: 8px;
+  }
+}
+
+/* =========================================
+   My Travel Stories - Account Dashboard
+   ========================================= */
+
+#travel-stories-section {
+  background: #ffffff;
+  color: #111e2d;
+}
+
+#travel-stories-section h2,
+#travel-stories-section h3,
+#travel-stories-section p,
+#travel-stories-section .account-section-kicker {
+  color: #111e2d;
+}
+
+#travel-stories-section .account-section-heading p {
+  color: #7d858c;
+}
+
+.account-story-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin-top: 20px;
+}
+
+.account-story-toolbar button {
+  padding: 9px 14px;
+  border: 1px solid #d1d8cc;
+  border-radius: 9px;
+  background: #ffffff;
+  color: #263522;
+  font: inherit;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.account-story-toolbar button:hover {
+  border-color: #8da64f;
+}
+
+.account-story-toolbar button:disabled {
+  opacity: 0.5;
+  cursor: wait;
+}
+
+.account-story-message {
+  min-height: 1.4em;
+  margin: 15px 0;
+  font-size: 12px;
+  color: #68727b !important;
+}
+
+.account-story-message.is-error {
+  color: #b42318 !important;
+}
+
+.account-story-list {
+  display: grid;
+  gap: 13px;
+}
+
+.account-story-card {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 18px;
+  padding: 18px;
+  border: 1px solid #e1e5dd;
+  border-radius: 12px;
+  background: #fafbf8;
+}
+
+.account-story-copy {
+  min-width: 0;
+  flex: 1;
+}
+
+.account-story-status {
+  display: inline-block;
+  margin-bottom: 7px;
+  padding: 4px 9px;
+  border-radius: 20px;
+  background: #edf2df;
+  color: #53682c;
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: capitalize;
+}
+
+.account-story-copy h3 {
+  margin: 0 0 6px;
+  font: 800 16px Manrope, sans-serif;
+  overflow-wrap: anywhere;
+}
+
+.account-story-copy p {
+  margin: 0;
+  color: #727b83 !important;
+  font-size: 12px;
+}
+
+.account-story-actions {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 9px;
+}
+
+.account-story-view,
+.account-story-delete {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 38px;
+  padding: 8px 13px;
+  border-radius: 8px;
+  font: inherit;
+  font-size: 12px;
+  font-weight: 700;
+  text-decoration: none;
+  cursor: pointer;
+}
+
+.account-story-view {
+  border: 1px solid #d4dfbd;
+  background: #edf2df;
+  color: #40551d;
+}
+
+.account-story-delete {
+  border: 1px solid #e5c5c5;
+  background: #ffffff;
+  color: #b42318;
+}
+
+.account-story-delete:hover {
+  background: #fff1f0;
+}
+
+.account-story-delete:disabled {
+  opacity: 0.5;
+  cursor: wait;
+}
+
+@media (max-width: 600px) {
+  .account-story-card {
+    align-items: flex-start;
+    flex-direction: column;
+    padding: 15px;
+  }
+
+  .account-story-actions {
+    width: 100%;
+  }
+}
+
+/* Travel Stories cover photos in account dashboard */
+
+.account-story-card {
+  display: grid;
+  grid-template-columns: 160px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 18px;
+}
+
+.account-story-cover {
+  display: block;
+  width: 160px;
+  height: 115px;
+  object-fit: cover;
+  border-radius: 10px;
+  background: #edf0e8;
+}
+
+.account-story-cover-placeholder {
+  width: 160px;
+  height: 115px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  border-radius: 10px;
+  background: #edf2df;
+  color: #53682c;
+  font-size: 12px;
+}
+
+.account-story-cover-placeholder span:first-child {
+  font-size: 28px;
+}
+
+@media (max-width: 760px) {
+  .account-story-card {
+    grid-template-columns: 110px minmax(0, 1fr);
+  }
+
+  .account-story-cover,
+  .account-story-cover-placeholder {
+    width: 110px;
+    height: 95px;
+  }
+
+  .account-story-actions {
+    grid-column: 1 / -1;
+  }
+}
+
+@media (max-width: 420px) {
+  .account-story-card {
+    grid-template-columns: 1fr;
+  }
+
+  .account-story-cover,
+  .account-story-cover-placeholder {
+    width: 100%;
+    height: 180px;
+  }
+}
+
+/* =====================================
+   Official GetOffDeals Logo
+   ===================================== */
+
+.brand {
+  display: inline-flex;
+  align-items: center;
+  flex-shrink: 0;
+  text-decoration: none;
+}
+
+.brand-logo {
+  display: block;
+  width: auto;
+  height: 58px;
+  max-width: 230px;
+  object-fit: contain;
+}
+
+.footer-brand .brand-logo {
+  height: 48px;
+  max-width: 210px;
+}
+
+@media (max-width: 900px) {
+  .brand-logo {
+    height: 48px;
+    max-width: 190px;
+  }
+}
+
+@media (max-width: 600px) {
+  .brand-logo {
+    height: 42px;
+    max-width: 155px;
+  }
+
+  .footer-brand .brand-logo {
+    height: 40px;
+  }
 }

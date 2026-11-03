@@ -97,3 +97,91 @@ def send_newsletter_confirmation(
         </div>
         """,
     })
+
+def send_welcome_email(to_email, first_name, subscribe_url):
+    """Send a welcome email with a newsletter subscription invitation."""
+    api_key = os.getenv("RESEND_API_KEY")
+    sender = os.getenv("EMAIL_FROM")
+
+    if not api_key or not sender:
+        raise RuntimeError("Resend email configuration is missing.")
+
+    safe_name = escape(first_name or "traveller")
+    safe_subscribe_url = escape(subscribe_url, quote=True)
+
+    poster_url = (
+        "https://getoffdeals.com/"
+        "static/images/getoffdeals-welcome-poster.png"
+    )
+
+    resend.api_key = api_key
+
+    return resend.Emails.send({
+        "from": sender,
+        "to": [to_email],
+        "subject": (
+            "Welcome to GetOffDeals! "
+            "Your journey to better travel starts here ✈️"
+        ),
+        "html": f"""
+        <div style="
+            font-family:Arial,sans-serif;
+            line-height:1.7;
+            max-width:600px;
+            margin:auto;
+            color:#24313d;
+        ">
+          <img
+            src="{poster_url}"
+            alt="Welcome to GetOffDeals"
+            style="width:100%;height:auto;border-radius:12px;"
+          >
+
+          <h2>Hello {safe_name}!</h2>
+
+          <h3>
+            Welcome to the world of possibilities
+            of travel and pay less!
+          </h3>
+
+          <p>
+            Thank you for joining GetOffDeals.
+            We're excited to help you discover travel
+            inspiration and opportunities to save on your journeys.
+          </p>
+
+          <p>
+            Want to receive occasional flight deals
+            and travel updates?
+          </p>
+
+          <p style="text-align:center;margin:30px 0;">
+            <a
+              href="{safe_subscribe_url}"
+              style="
+                display:inline-block;
+                padding:15px 24px;
+                background:#c8f169;
+                color:#14202b;
+                text-decoration:none;
+                font-weight:bold;
+                border-radius:8px;
+              "
+            >
+              Subscribe to GetOffDeals Newsletter
+            </a>
+          </p>
+
+          <p>
+            Subscribing is optional. You'll receive a separate
+            confirmation email before newsletter updates begin.
+          </p>
+
+          <p>Happy travels!</p>
+          <p><strong>The GetOffDeals Team</strong></p>
+          <p>
+            <a href="https://getoffdeals.com">getoffdeals.com</a>
+          </p>
+        </div>
+        """,
+    })

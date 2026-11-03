@@ -3,6 +3,7 @@ import sqlite3
 
 import app as app_module
 import getoffdeals.newsletter_service as newsletter_service
+import getoffdeals.newsletter_invitation_service as invitation_service
 
 
 def setup_newsletter_db(monkeypatch, tmp_path):
@@ -17,6 +18,22 @@ def setup_newsletter_db(monkeypatch, tmp_path):
     )
 
     app_module.init_db()
+
+    with app_module.db_connect() as conn:
+        conn.execute(
+            """
+            CREATE TABLE IF NOT EXISTS newsletter_invitations (
+                id TEXT PRIMARY KEY,
+                user_id TEXT NOT NULL,
+                email TEXT NOT NULL,
+                token_hash TEXT NOT NULL UNIQUE,
+                expires_at TEXT NOT NULL,
+                used_at TEXT,
+                created_at TEXT NOT NULL
+            )
+            """
+        )
+
     return db_path
 
 
@@ -452,3 +469,333 @@ def test_repeat_signup_does_not_reactivate_unsubscribed_contact(
 
     assert row["status"] == "unsubscribed"
     assert row["consent"] == 0
+
+
+def test_invitation_get_displays_email_without_consuming_token(
+    client, monkeypatch, tmp_path
+):
+    setup_newsletter_db(monkeypatch, tmp_path)
+
+    with app_module.newsletter_db_connect() as conn:
+        invitation = invitation_service.create_invitation(
+            conn,
+            user_id="test-user-001",
+            email="Reader@Example.com",
+        )
+
+    response = client.get(
+        f"/newsletter/join/{invitation['token']}"
+    )
+
+    assert response.status_code == 200
+    assert b"reader@example.com" in response.data
+    assert b"Yes, subscribe me" in response.data
+
+    with app_module.newsletter_db_connect() as conn:
+        email = invitation_service.get_invitation_email(
+            conn,
+            invitation["token"],
+        )
+
+    assert email == "reader@example.com"
+
+
+def test_invitation_post_requires_csrf_token(
+    client, monkeypatch, tmp_path
+):
+    setup_newsletter_db(monkeypatch, tmp_path)
+
+    with app_module.newsletter_db_connect() as conn:
+        invitation = invitation_service.create_invitation(
+            conn,
+            user_id="test-user-002",
+            email="reader@example.com",
+        )
+
+    response = client.post(
+        f"/newsletter/join/{invitation['token']}",
+        data={},
+    )
+
+    assert response.status_code == 400
+
+    with app_module.newsletter_db_connect() as conn:
+        email = invitation_service.get_invitation_email(
+            conn,
+            invitation["token"],
+        )
+
+    assert email == "reader@example.com"
+
+
+def test_invitation_post_starts_double_opt_in(
+    client, monkeypatch, tmp_path
+):
+    setup_newsletter_db(monkeypatch, tmp_path)
+    monkeypatch.setenv(
+        "PUBLIC_BASE_URL",
+        "https://getoffdeals.example",
+    )
+
+    sent = []
+
+    def fake_send(to_email, confirmation_url, unsubscribe_url):
+        sent.append((to_email, confirmation_url, unsubscribe_url))
+        return {"id": "mock-confirmation-id"}
+
+    monkeypatch.setattr(
+        app_module,
+        "send_newsletter_confirmation",
+        fake_send,
+    )
+
+    with app_module.newsletter_db_connect() as conn:
+        invitation = invitation_service.create_invitation(
+            conn,
+            user_id="test-user-003",
+            email="reader@example.com",
+        )
+
+    page = client.get(
+        f"/newsletter/join/{invitation['token']}"
+    )
+    assert page.status_code == 200
+
+    with client.session_transaction() as sess:
+        csrf_token = sess["newsletter_join_csrf_token"]
+
+    response = client.post(
+        f"/newsletter/join/{invitation['token']}",
+        data={"csrf_token": csrf_token},
+    )
+
+    assert response.status_code == 200
+    assert b"One more step" in response.data
+    assert len(sent) == 1
+    assert sent[0][0] == "reader@example.com"
+    assert sent[0][1].startswith(
+        "https://getoffdeals.example/newsletter/confirm/"
+    )
+    assert sent[0][2].startswith(
+        "https://getoffdeals.example/newsletter/unsubscribe/"
+    )
+
+    with app_module.newsletter_db_connect() as conn:
+        subscriber = conn.execute(
+            "SELECT status, consent FROM subscribers "
+            "WHERE email = ?",
+            ("reader@example.com",),
+        ).fetchone()
+
+        invitation_email = invitation_service.get_invitation_email(
+            conn,
+            invitation["token"],
+        )
+
+    assert subscriber["status"] == "pending"
+    assert subscriber["consent"] == 1
+    assert invitation_email is None
+
+
+def test_invitation_cannot_be_reused(
+    client, monkeypatch, tmp_path
+):
+    setup_newsletter_db(monkeypatch, tmp_path)
+    monkeypatch.setenv(
+        "PUBLIC_BASE_URL",
+        "https://getoffdeals.example",
+    )
+
+    sent = []
+
+    monkeypatch.setattr(
+        app_module,
+        "send_newsletter_confirmation",
+        lambda *args: sent.append(args),
+    )
+
+    with app_module.newsletter_db_connect() as conn:
+        invitation = invitation_service.create_invitation(
+            conn,
+            user_id="test-user-004",
+            email="reader@example.com",
+        )
+
+    token = invitation["token"]
+
+    client.get(f"/newsletter/join/{token}")
+
+    with client.session_transaction() as sess:
+        csrf_token = sess["newsletter_join_csrf_token"]
+
+    first_response = client.post(
+        f"/newsletter/join/{token}",
+        data={"csrf_token": csrf_token},
+    )
+    assert first_response.status_code == 200
+    assert len(sent) == 1
+
+    second_response = client.get(f"/newsletter/join/{token}")
+
+    assert second_response.status_code == 200
+    assert b"Invitation unavailable" in second_response.data
+    assert len(sent) == 1
+
+
+def test_invitation_does_not_override_unsubscribed_status(
+    client, monkeypatch, tmp_path
+):
+    setup_newsletter_db(monkeypatch, tmp_path)
+
+    sent = []
+
+    monkeypatch.setattr(
+        app_module,
+        "send_newsletter_confirmation",
+        lambda *args: sent.append(args),
+    )
+
+    with app_module.newsletter_db_connect() as conn:
+        subscription = newsletter_service.prepare_subscription(
+            conn,
+            "reader@example.com",
+        )
+
+        newsletter_service.confirm_subscription(
+            conn,
+            subscription["confirmation_token"],
+        )
+
+        newsletter_service.unsubscribe_subscription(
+            conn,
+            subscription["unsubscribe_token"],
+        )
+
+        invitation = invitation_service.create_invitation(
+            conn,
+            user_id="test-user-005",
+            email="reader@example.com",
+        )
+
+    client.get(f"/newsletter/join/{invitation['token']}")
+
+    with client.session_transaction() as sess:
+        csrf_token = sess["newsletter_join_csrf_token"]
+
+    response = client.post(
+        f"/newsletter/join/{invitation['token']}",
+        data={"csrf_token": csrf_token},
+    )
+
+    assert response.status_code == 200
+    assert b"previously unsubscribed" in response.data
+    assert sent == []
+
+    with app_module.newsletter_db_connect() as conn:
+        row = conn.execute(
+            "SELECT status, consent FROM subscribers "
+            "WHERE email = ?",
+            ("reader@example.com",),
+        ).fetchone()
+
+    assert row["status"] == "unsubscribed"
+
+
+
+def test_invitation_email_failure_can_be_retried(
+    client, monkeypatch, tmp_path
+):
+    setup_newsletter_db(monkeypatch, tmp_path)
+    monkeypatch.setenv(
+        "PUBLIC_BASE_URL",
+        "https://getoffdeals.example",
+    )
+
+    attempts = []
+
+    def unreliable_send(to_email, confirmation_url, unsubscribe_url):
+        attempts.append(to_email)
+
+        if len(attempts) == 1:
+            raise RuntimeError("Simulated Resend failure")
+
+        return {"id": "mock-retry-email-id"}
+
+    monkeypatch.setattr(
+        app_module,
+        "send_newsletter_confirmation",
+        unreliable_send,
+    )
+
+    with app_module.newsletter_db_connect() as conn:
+        invitation = invitation_service.create_invitation(
+            conn,
+            user_id="test-user-retry",
+            email="reader@example.com",
+        )
+
+    token = invitation["token"]
+
+    # First attempt: email delivery fails.
+    page = client.get(f"/newsletter/join/{token}")
+    assert page.status_code == 200
+
+    with client.session_transaction() as sess:
+        csrf_token = sess["newsletter_join_csrf_token"]
+
+    failed_response = client.post(
+        f"/newsletter/join/{token}",
+        data={"csrf_token": csrf_token},
+    )
+
+    assert failed_response.status_code == 503
+    assert b"Confirmation email not sent" in failed_response.data
+    assert b"Retry sending confirmation email" in failed_response.data
+
+    # The invitation must have been restored.
+    with app_module.newsletter_db_connect() as conn:
+        assert (
+            invitation_service.get_invitation_email(conn, token)
+            == "reader@example.com"
+        )
+
+        subscriber = conn.execute(
+            "SELECT status, consent FROM subscribers "
+            "WHERE email = ?",
+            ("reader@example.com",),
+        ).fetchone()
+
+    assert subscriber["status"] == "pending"
+    assert subscriber["consent"] == 1
+
+    # Second attempt: email delivery succeeds.
+    with client.session_transaction() as sess:
+        retry_csrf_token = sess["newsletter_join_csrf_token"]
+
+    retry_response = client.post(
+        f"/newsletter/join/{token}",
+        data={"csrf_token": retry_csrf_token},
+    )
+
+    assert retry_response.status_code == 200
+    assert b"One more step" in retry_response.data
+    assert attempts == [
+        "reader@example.com",
+        "reader@example.com",
+    ]
+
+    # The invitation is consumed after the successful retry.
+    with app_module.newsletter_db_connect() as conn:
+        assert (
+            invitation_service.get_invitation_email(conn, token)
+            is None
+        )
+
+        subscriber = conn.execute(
+            "SELECT status, consent FROM subscribers "
+            "WHERE email = ?",
+            ("reader@example.com",),
+        ).fetchone()
+
+    assert subscriber["status"] == "pending"
+    assert subscriber["consent"] == 1

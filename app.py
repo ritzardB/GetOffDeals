@@ -27,6 +27,8 @@ from getoffdeals.postgres_sessions import (
 )
 from getoffdeals.price_alerts import price_alerts_bp
 
+from getoffdeals.travel_stories.routes import travel_stories_bp
+
 from getoffdeals.unsubscribe_routes import unsubscribe_bp
 
 from getoffdeals.email_service import send_newsletter_confirmation
@@ -37,24 +39,58 @@ from getoffdeals.newsletter_service import (
     unsubscribe_subscription,
 )
 
+from getoffdeals.newsletter_invitation_service import (
+    consume_invitation,
+    get_invitation_email,
+    restore_invitation,
+)
+
+from getoffdeals.travel_stories.validators import generate_csrf_token
+
 load_dotenv()
 
 app = Flask(__name__)
+
+# Local Travel Stories photo storage.
+app.config["TRAVEL_STORIES_UPLOAD_FOLDER"] = os.path.join(
+    app.instance_path,
+    "travel-stories",
+)
+app.config["TRAVEL_STORIES_MAX_IMAGE_BYTES"] = 5 * 1024 * 1024
+app.config["TRAVEL_STORIES_MAX_GALLERY_IMAGES"] = 10
+app.config["MAX_CONTENT_LENGTH"] = 56 * 1024 * 1024
+
+os.makedirs(app.config["TRAVEL_STORIES_UPLOAD_FOLDER"], exist_ok=True)
+
 app.register_blueprint(price_alerts_bp)
 app.register_blueprint(unsubscribe_bp)
+app.register_blueprint(travel_stories_bp)
 app.config["JSON_SORT_KEYS"] = False
 
 
+
 def sync_authenticated_user(user_id, email, first_name="", last_name=""):
-    """Synchronize a Supabase Auth user into public.users."""
+    """Synchronize a verified Supabase user and queue one welcome email."""
     try:
         normalized_id = str(UUID(str(user_id)))
     except (ValueError, TypeError, AttributeError) as exc:
-        raise ValueError("Authenticated user ID must be a valid UUID.") from exc
+        raise ValueError(
+            "Authenticated user ID must be a valid UUID."
+        ) from exc
 
     if not isinstance(email, str) or not email.strip():
         raise ValueError("Authenticated user email is required.")
 
+    normalized_email = email.strip().lower()
+
+    normalized_first_name = (
+        first_name.strip() if isinstance(first_name, str) else ""
+    )
+    normalized_last_name = (
+        last_name.strip() if isinstance(last_name, str) else ""
+    )
+
+    # Both operations share one PostgreSQL transaction.
     with get_connection() as conn:
         with conn.cursor() as cur:
             cur.execute(
@@ -72,9 +108,34 @@ def sync_authenticated_user(user_id, email, first_name="", last_name=""):
                 """,
                 (
                     normalized_id,
-                    email.strip().lower(),
-                    first_name.strip() if isinstance(first_name, str) else "",
-                    last_name.strip() if isinstance(last_name, str) else "",
+                    normalized_email,
+                    normalized_first_name,
+                    normalized_last_name,
+                ),
+            )
+
+            cur.execute(
+                """
+                INSERT INTO public.welcome_email_outbox (
+                    user_id,
+                    email,
+                    first_name,
+                    status,
+                    attempts,
+                    next_attempt_at,
+                    created_at,
+                    updated_at
+                )
+                VALUES (
+                    %s, %s, %s, 'pending', 0,
+                    NOW(), NOW(), NOW()
+                )
+                ON CONFLICT (user_id) DO NOTHING
+                """,
+                (
+                    normalized_id,
+                    normalized_email,
+                    normalized_first_name,
                 ),
             )
 
@@ -337,7 +398,6 @@ def fetch_travelpayouts_deals():
     return deals
 
 
-
 def supabase_auth_config():
     """Return validated Supabase Auth configuration and request headers."""
     from urllib.parse import urlparse
@@ -403,8 +463,17 @@ def supabase_auth_request(
         data = {}
 
     if not response.ok:
+        app.logger.warning(
+            "Supabase Auth diagnostic: HTTP status=%s",
+            response.status_code,
+        )
+
         if response.status_code in (400, 401, 422):
-            return None, "Unable to authenticate. Check your details or verify your email."
+            return None, (
+                "Unable to authenticate. "
+                "Check your details or verify your email."
+            )
+
         return None, "Supabase Auth could not complete the request."
 
     if not isinstance(data, dict):
@@ -1000,6 +1069,7 @@ def account_page():
         first_name=session.get("first_name", "").strip(),
         email=session.get("email", ""),
         alerts=alerts,
+        csrf_token=generate_csrf_token(session),
     )
 
 
@@ -1633,6 +1703,158 @@ def newsletter_confirm(token):
                 render_template(
                     "newsletter_confirm.html",
                     result=result,
+                )
+            )
+
+    response.headers["Cache-Control"] = "no-store"
+    response.headers["Referrer-Policy"] = "no-referrer"
+    response.headers["X-Content-Type-Options"] = "nosniff"
+    return response
+
+
+@app.route(
+    "/newsletter/join/<token>",
+    methods=["GET", "POST"],
+)
+def newsletter_join(token):
+    import hmac
+    import secrets
+
+    from getoffdeals.newsletter_invitation_service import (
+        consume_invitation,
+        get_invitation_email,
+    )
+
+    if not isinstance(token, str) or not 20 <= len(token) <= 200:
+        abort(404)
+
+    if request.method == "GET":
+        try:
+            with newsletter_db_connect() as conn:
+                email = get_invitation_email(conn, token)
+        except (sqlite3.Error, psycopg.Error):
+            app.logger.exception("Could not inspect newsletter invitation")
+            abort(500)
+
+        result = "ready" if email else "unavailable"
+        csrf_token = None
+
+        if email:
+            csrf_token = secrets.token_urlsafe(32)
+            session["newsletter_join_csrf_token"] = csrf_token
+
+        response = app.make_response(
+            render_template(
+                "newsletter_join.html",
+                result=result,
+                email=email,
+                csrf_token=csrf_token,
+            )
+        )
+
+    else:
+        expected = session.get("newsletter_join_csrf_token")
+        submitted = request.form.get("csrf_token", "")
+
+        if (
+            not isinstance(expected, str)
+            or not isinstance(submitted, str)
+            or not hmac.compare_digest(expected, submitted)
+        ):
+            abort(400, description="Invalid form token. Please reopen the invitation.")
+
+        session.pop("newsletter_join_csrf_token", None)
+
+        try:
+            with newsletter_db_connect() as conn:
+                email = consume_invitation(conn, token)
+
+                if not email:
+                    result = "unavailable"
+                    subscription = None
+                else:
+                    subscription = prepare_subscription(conn, email)
+                    result = subscription["status"]
+
+        except (sqlite3.Error, psycopg.Error):
+            app.logger.exception("Could not process newsletter invitation")
+            abort(500)
+
+        if result == "pending":
+            public_base_url = os.getenv("PUBLIC_BASE_URL", "").strip().rstrip("/")
+
+            if not public_base_url.startswith("https://"):
+                app.logger.error("PUBLIC_BASE_URL must use HTTPS")
+                abort(500)
+
+            confirmation_url = (
+                f"{public_base_url}/newsletter/confirm/"
+                f"{subscription['confirmation_token']}"
+            )
+            unsubscribe_url = (
+                f"{public_base_url}/newsletter/unsubscribe/"
+                f"{subscription['unsubscribe_token']}"
+            )
+
+            try:
+                send_newsletter_confirmation(
+                    email,
+                    confirmation_url,
+                    unsubscribe_url,
+                )
+
+            except Exception:
+                app.logger.exception(
+                    "Could not send invitation newsletter confirmation"
+                )
+
+                try:
+                    with newsletter_db_connect() as conn:
+                        restored = restore_invitation(conn, token)
+                except (sqlite3.Error, psycopg.Error):
+                    app.logger.exception(
+                        "Could not restore newsletter invitation"
+                    )
+                    abort(500)
+
+                if restored:
+                    retry_csrf_token = secrets.token_urlsafe(32)
+                    session["newsletter_join_csrf_token"] = (
+                        retry_csrf_token
+                    )
+
+                    response = app.make_response(
+                        render_template(
+                            "newsletter_join.html",
+                            result="retry",
+                            email=email,
+                            csrf_token=retry_csrf_token,
+                        )
+                    )
+                    response.status_code = 503
+                else:
+                    response = app.make_response(
+                        render_template(
+                            "newsletter_join.html",
+                            result="unavailable",
+                            email=None,
+                        )
+                    )
+
+            else:
+                response = app.make_response(
+                    render_template(
+                        "newsletter_join.html",
+                        result="pending",
+                        email=email,
+                    )
+                )
+        else:
+            response = app.make_response(
+                render_template(
+                    "newsletter_join.html",
+                    result=result,
+                    email=email,
                 )
             )
 

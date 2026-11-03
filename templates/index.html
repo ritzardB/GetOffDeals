@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="theme-color" content="#101b2b"><meta name="description" content="Flight deal inspiration for Filipino travellers in the UAE and Philippines. Compare fares from Abu Dhabi, Dubai and Philippine gateways.">
-  <title>GetOffDeas — Flight deals worth the trip</title>
+  <title>GetOffDeals — Flight deals worth the trip</title>
   <link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=Manrope:wght@400;500;600;700;800&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
@@ -13,8 +13,11 @@
 <header class="nav-wrap">
   <nav class="nav container">
     <a class="brand" href="#top" aria-label="GetOffDeals home">
-      <span class="brand-mark">↗</span>
-      GetOffDeals<span class="brand-dot">.</span>
+      <img
+        src="{{ url_for('static', filename='images/getoffdeals_logo.png') }}"
+        alt="GetOffDeals"
+        class="brand-logo"
+      >
     </a>
 
     {% if session.get('user_id') and session.get('first_name') %}
@@ -22,8 +25,6 @@
         Hi, {{ session.get('first_name')|e }} 👋
       </span>
     {% endif %}
-
-    
     <div class="nav-links">
       <a href="#deals">
         <svg class="nav-icon" viewBox="0 0 24 24" aria-hidden="true">
@@ -87,7 +88,6 @@
       Find a flight <span>↗</span>
     </a>
     {% endif %}
-
     <button
       class="menu-toggle"
       type="button"
@@ -127,6 +127,14 @@
         <p class="hero-sub">Flight inspiration for Filipinos flying between the UAE and the Philippines—plus city breaks and island escapes worth saving for.</p>
         <div class="hero-actions">
           <a class="button button-lime" href="#deals">Explore flight deals <span>↘</span></a>
+          <a class="travel-stories-shortcut" href="/travel-stories">
+          <span class="travel-stories-icon" aria-hidden="true">▤</span>
+          <span class="travel-stories-text">
+            <strong>Travel Stories</strong>
+            <small>Explore journeys & experiences</small>
+          </span>
+          <span class="travel-stories-arrow" aria-hidden="true">↗</span>
+        </a>
           <div class="social-proof">
             <div class="avatar-stack">
             <i>✈</i>
@@ -306,9 +314,12 @@ The modal is designed to enhance user experience by providing a friendly and eng
 
 <footer class="footer">
   <div class="container footer-inner">
-    <a class="brand footer-brand" href="#top">
-      <span class="brand-mark">↗</span>
-      GetOffDeals<span class="brand-dot">.</span>
+    <a class="brand footer-brand" href="/">
+      <img
+        src="{{ url_for('static', filename='images/getoffdeals_logo.png') }}"
+        alt="GetOffDeals"
+        class="brand-logo"
+      >
     </a>
     <span>UAE ↔ Philippines · Travel further. Stay curious.</span>
     <span>© <span id="year"></span> GETOFFDEALS · BUILT FOR THE NEXT GETAWAY</span>

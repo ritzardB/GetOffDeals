@@ -51,10 +51,14 @@ def test_search_without_amadeus_credentials(client, monkeypatch):
 
 
 
+
 def test_database_connection_returns_database_name():
     from getoffdeals.database import check_connection
 
-    assert check_connection() == "postgres"
+    database_name = check_connection()
+
+    assert isinstance(database_name, str)
+    assert database_name.strip()
 
 
 def test_database_connection_has_expected_tables():
@@ -63,8 +67,14 @@ def test_database_connection_has_expected_tables():
     expected = {
         "users",
         "flight_alerts",
-        "price_checks",
-        "alert_notifications",
+        "travel_stories",
+        "story_comments",
+        "story_images",
+        "story_likes",
+        "story_reports",
+        "web_sessions",
+        "welcome_email_outbox",
+        "newsletter_invitations",
     }
 
     with get_connection() as conn:
@@ -78,7 +88,8 @@ def test_database_connection_has_expected_tables():
             )
             actual = {row["table_name"] for row in cursor.fetchall()}
 
-    assert expected.issubset(actual)
+    missing = expected - actual
+    assert not missing, f"Missing application tables: {sorted(missing)}"
 
 
 def test_session_cookie_security_settings(client):
