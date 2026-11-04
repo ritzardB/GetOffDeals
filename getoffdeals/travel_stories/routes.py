@@ -2,7 +2,6 @@
 """Flask routes for the GetOffDeals Travel Stories feature."""
 
 import logging
-from pathlib import Path
 from uuid import UUID
 
 from flask import (
@@ -14,12 +13,12 @@ from flask import (
     redirect,
     render_template,
     request,
-    send_file,
     session,
     url_for,
 )
 
-from getoffdeals.travel_stories import service, storage
+from getoffdeals.travel_stories import service, storage, supabase_storage
+
 from getoffdeals.travel_stories.validators import (
     current_user_id,
     generate_csrf_token,
@@ -106,7 +105,8 @@ def story_detail(slug):
     "/travel-stories/images/<story_id>/<filename>"
 )
 def story_image(story_id, filename):
-    """Serve an image only when it belongs to a published story."""
+    """Redirect to a Supabase image after verifying story publication."""
+
     try:
         normalized_story_id = str(UUID(str(story_id)))
     except (ValueError, TypeError, AttributeError):
@@ -135,29 +135,18 @@ def story_image(story_id, filename):
     if storage_path is None:
         abort(404)
 
-    upload_root = Path(
-        current_app.config["TRAVEL_STORIES_UPLOAD_FOLDER"]
-    ).resolve()
-
-    image_path = (upload_root / storage_path).resolve()
-
     try:
-        image_path.relative_to(upload_root)
-    except ValueError:
-        abort(404)
+        public_url = supabase_storage.get_public_image_url(
+            storage_path
+        )
+    except Exception:
+        current_app.logger.exception(
+            "Could not generate Supabase image URL."
+        )
+        abort(503)
 
-    if not image_path.is_file():
-        abort(404)
-
-    response = send_file(
-        image_path,
-        conditional=True,
-        etag=True,
-        max_age=3600,
-    )
-
+    response = redirect(public_url, code=302)
     response.headers["X-Content-Type-Options"] = "nosniff"
-    response.headers["Cache-Control"] = "public, max-age=3600"
 
     return response
 
@@ -239,10 +228,6 @@ def story_create():
             for image in gallery_uploads
         ]
 
-        upload_root = current_app.config[
-            "TRAVEL_STORIES_UPLOAD_FOLDER"
-        ]
-
         if processed_cover is None and not processed_gallery:
             story = service.create_story(user_id, values)
         else:
@@ -251,7 +236,6 @@ def story_create():
                 values,
                 cover_image=processed_cover,
                 gallery_images=processed_gallery,
-                upload_root=upload_root,
             )
 
     except storage.ImageValidationError as exc:
@@ -354,9 +338,6 @@ def story_delete(story_id):
         deleted = service.delete_story(
             user_id,
             story_id,
-            upload_root=current_app.config.get(
-                "TRAVEL_STORIES_UPLOAD_FOLDER"
-            ),
         )
     except Exception:
         current_app.logger.exception("Could not delete travel story.")

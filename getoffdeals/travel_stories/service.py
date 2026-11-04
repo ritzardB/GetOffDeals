@@ -5,7 +5,7 @@ import logging
 from uuid import UUID, uuid4
 
 from getoffdeals.database import get_connection
-from getoffdeals.travel_stories import storage
+from getoffdeals.travel_stories import supabase_storage
 from getoffdeals.travel_stories.validators import make_slug
 
 logger = logging.getLogger(__name__)
@@ -73,9 +73,9 @@ def create_story(
     values,
     cover_image=None,
     gallery_images=None,
-    upload_root=None,
 ):
-    """Create a story and save its images with transaction cleanup."""
+    """Create a story and save its images to Supabase Storage."""
+
     user_id = _canonical_user_id(user_id)
     base_slug = make_slug(values["title"])
     gallery_images = gallery_images or []
@@ -85,9 +85,6 @@ def create_story(
 
     if len(gallery_images) > 10:
         raise ValueError("A maximum of 10 gallery images is allowed.")
-
-    if (cover_image is not None or gallery_images) and not upload_root:
-        raise ValueError("Image storage is not configured.")
 
     created_paths = []
 
@@ -155,17 +152,18 @@ def create_story(
 
                 story_id = story["id"]
 
+                # Upload cover image to Supabase Storage.
                 cover_path = None
 
                 if cover_image is not None:
                     cover_bytes, cover_format = cover_image
 
-                    cover_path = storage.save_processed_image(
+                    cover_path = supabase_storage.upload_processed_image(
                         cover_bytes,
                         cover_format,
                         story_id,
-                        upload_root,
                     )
+
                     created_paths.append(cover_path)
 
                     cur.execute(
@@ -177,18 +175,20 @@ def create_story(
                         (cover_path, story_id),
                     )
 
+                # Upload gallery images to Supabase Storage.
                 gallery_paths = []
 
                 for image_bytes, image_format in gallery_images:
-                    image_path = storage.save_processed_image(
+                    image_path = supabase_storage.upload_processed_image(
                         image_bytes,
                         image_format,
                         story_id,
-                        upload_root,
                     )
+
                     created_paths.append(image_path)
                     gallery_paths.append(image_path)
 
+                # Save gallery image references in PostgreSQL.
                 for position, image_path in enumerate(gallery_paths):
                     cur.execute(
                         """
@@ -207,15 +207,18 @@ def create_story(
                 return dict(story)
 
     except Exception:
+        # Remove uploaded Supabase objects if story creation fails.
         for image_path in reversed(created_paths):
             try:
-                storage.delete_story_image(image_path, upload_root)
+                supabase_storage.delete_story_image(image_path)
             except Exception:
-                # Preserve the original database or storage exception.
-                pass
+                logger.exception(
+                    "Could not clean up uploaded image after story creation "
+                    "failed: %s",
+                    image_path,
+                )
 
         raise
-
 
 def list_published_stories(limit=20, offset=0):
     """Return published stories, newest first."""
@@ -428,11 +431,11 @@ def update_story(user_id, story_id, values):
             return dict(row) if row else None
 
 
-def delete_story(user_id, story_id, upload_root=None):
+def delete_story(user_id, story_id):
     """
-    Delete a member-owned story and clean up its stored images.
+    Delete a member-owned story and clean up its Supabase images.
 
-    Database deletion is committed before physical files are removed.
+    Database deletion is committed before Supabase image cleanup.
     """
     user_id = _canonical_user_id(user_id)
 
@@ -443,7 +446,7 @@ def delete_story(user_id, story_id, upload_root=None):
 
     image_paths = []
 
-    # First, collect image paths and delete the story in one transaction.
+    # Collect image paths and delete the story in one transaction.
     with get_connection() as conn:
         with conn.cursor() as cur:
             cur.execute(
@@ -498,33 +501,23 @@ def delete_story(user_id, story_id, upload_root=None):
             if not deleted:
                 return False
 
-    # The database transaction has now committed.
-    # Only now should we remove physical image files.
-    if image_paths and not upload_root:
-        logger.warning(
-            "Story %s was deleted, but image cleanup was skipped: "
-            "upload directory is not configured.",
-            story_id,
-        )
-        return True
-
+    # Database transaction has committed.
+    # Remove the associated objects from Supabase Storage.
     for image_path in dict.fromkeys(image_paths):
         try:
-            removed = storage.delete_story_image(
-                image_path,
-                upload_root,
-            )
+            removed = supabase_storage.delete_story_image(image_path)
 
             if not removed:
                 logger.warning(
-                    "Could not remove image %s for deleted story %s.",
+                    "Could not remove Supabase image %s "
+                    "for deleted story %s.",
                     image_path,
                     story_id,
                 )
 
         except Exception:
             logger.exception(
-                "Image cleanup failed for deleted story %s: %s",
+                "Supabase image cleanup failed for deleted story %s: %s",
                 story_id,
                 image_path,
             )

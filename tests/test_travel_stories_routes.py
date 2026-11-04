@@ -165,39 +165,34 @@ def test_daily_story_limit_returns_http_429(client, monkeypatch):
     assert "limit of 3" in response.json["error"]
 
 
-def test_published_story_image_is_served(client, monkeypatch):
+def test_published_story_image_redirects_to_supabase(client, monkeypatch):
     story_id = MOCK_STORY["id"]
     filename = "cover.jpg"
+    storage_path = f"{story_id}/{filename}"
+    public_url = (
+        "https://example.supabase.co/storage/v1/object/public/"
+        f"travel-stories/{storage_path}"
+    )
 
-    with TemporaryDirectory() as temp_dir:
-        upload_root = Path(temp_dir)
-        story_folder = upload_root / story_id
-        story_folder.mkdir()
+    monkeypatch.setattr(
+        routes.service,
+        "get_published_story_image_path",
+        lambda requested_story_id, requested_filename: storage_path,
+    )
 
-        image_content = b"test-image-content"
-        image_file = story_folder / filename
-        image_file.write_bytes(image_content)
+    monkeypatch.setattr(
+        routes.supabase_storage,
+        "get_public_image_url",
+        lambda requested_path: public_url,
+    )
 
-        client.application.config[
-            "TRAVEL_STORIES_UPLOAD_FOLDER"
-        ] = str(upload_root)
+    response = client.get(
+        f"/travel-stories/images/{story_id}/{filename}"
+    )
 
-        monkeypatch.setattr(
-            routes.service,
-            "get_published_story_image_path",
-            lambda requested_story_id, requested_filename: (
-                f"{requested_story_id}/{requested_filename}"
-            ),
-        )
-
-        response = client.get(
-            f"/travel-stories/images/{story_id}/{filename}"
-        )
-
-        assert response.status_code == 200
-        assert response.data == image_content
-        assert response.headers["X-Content-Type-Options"] == "nosniff"
-        assert response.headers["Cache-Control"] == "public, max-age=3600"
+    assert response.status_code == 302
+    assert response.headers["Location"] == public_url
+    assert response.headers["X-Content-Type-Options"] == "nosniff"
 
 
 def test_story_image_rejects_invalid_story_id_and_filename(
@@ -230,58 +225,59 @@ def test_story_image_returns_404_when_not_registered(
     story_id = MOCK_STORY["id"]
     filename = "private.jpg"
 
-    with TemporaryDirectory() as temp_dir:
-        upload_root = Path(temp_dir)
-        story_folder = upload_root / story_id
-        story_folder.mkdir()
+    monkeypatch.setattr(
+        routes.service,
+        "get_published_story_image_path",
+        lambda requested_story_id, requested_filename: None,
+    )
 
-        # The file exists, but the service does not approve it.
-        (story_folder / filename).write_bytes(b"private-image")
-
-        client.application.config[
-            "TRAVEL_STORIES_UPLOAD_FOLDER"
-        ] = str(upload_root)
-
-        monkeypatch.setattr(
-            routes.service,
-            "get_published_story_image_path",
-            lambda requested_story_id, requested_filename: None,
+    def should_not_generate_url(*args, **kwargs):
+        raise AssertionError(
+            "Unregistered image reached Supabase URL generation"
         )
 
-        response = client.get(
-            f"/travel-stories/images/{story_id}/{filename}"
-        )
+    monkeypatch.setattr(
+        routes.supabase_storage,
+        "get_public_image_url",
+        should_not_generate_url,
+    )
 
-        assert response.status_code == 404
+    response = client.get(
+        f"/travel-stories/images/{story_id}/{filename}"
+    )
+
+    assert response.status_code == 404
 
 
-def test_story_image_returns_404_when_file_is_missing(
+def test_story_image_returns_503_when_supabase_url_generation_fails(
     client,
     monkeypatch,
 ):
     story_id = MOCK_STORY["id"]
-    filename = "missing.jpg"
+    filename = "cover.jpg"
 
-    with TemporaryDirectory() as temp_dir:
-        upload_root = Path(temp_dir)
+    monkeypatch.setattr(
+        routes.service,
+        "get_published_story_image_path",
+        lambda requested_story_id, requested_filename: (
+            f"{requested_story_id}/{requested_filename}"
+        ),
+    )
 
-        client.application.config[
-            "TRAVEL_STORIES_UPLOAD_FOLDER"
-        ] = str(upload_root)
+    def fail_url_generation(storage_path):
+        raise RuntimeError("Simulated Supabase URL failure")
 
-        monkeypatch.setattr(
-            routes.service,
-            "get_published_story_image_path",
-            lambda requested_story_id, requested_filename: (
-                f"{requested_story_id}/{requested_filename}"
-            ),
-        )
+    monkeypatch.setattr(
+        routes.supabase_storage,
+        "get_public_image_url",
+        fail_url_generation,
+    )
 
-        response = client.get(
-            f"/travel-stories/images/{story_id}/{filename}"
-        )
+    response = client.get(
+        f"/travel-stories/images/{story_id}/{filename}"
+    )
 
-        assert response.status_code == 404
+    assert response.status_code == 503
 
 def test_story_image_returns_503_when_service_fails(
     client,

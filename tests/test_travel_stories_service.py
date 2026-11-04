@@ -216,12 +216,12 @@ def test_delete_story_restricts_to_owner(fake_database, monkeypatch, tmp_path):
 
     deleted_paths = []
 
-    def fake_delete_image(path, upload_root):
+    def fake_delete_image(path):
         deleted_paths.append(path)
         return True
 
     monkeypatch.setattr(
-        service.storage,
+        service.supabase_storage,
         "delete_story_image",
         fake_delete_image,
     )
@@ -229,7 +229,6 @@ def test_delete_story_restricts_to_owner(fake_database, monkeypatch, tmp_path):
     result = service.delete_story(
         USER_ID,
         STORY_ID,
-        upload_root=str(tmp_path),
     )
 
     assert result is True
@@ -261,7 +260,7 @@ def test_delete_story_does_not_remove_files_when_not_owned(
         raise AssertionError("Image deletion must not run")
 
     monkeypatch.setattr(
-        service.storage,
+        service.supabase_storage,
         "delete_story_image",
         should_not_delete,
     )
@@ -269,7 +268,6 @@ def test_delete_story_does_not_remove_files_when_not_owned(
     result = service.delete_story(
         OTHER_USER_ID,
         STORY_ID,
-        upload_root=str(tmp_path),
     )
 
     assert result is False
@@ -340,14 +338,14 @@ def test_create_story_saves_cover_and_gallery_images(
 
     saved_images = []
 
-    def fake_save(processed, image_format, story_id, upload_root):
+    def fake_upload(processed, image_format, story_id):
         saved_images.append((processed, image_format, str(story_id)))
         return f"{story_id}/{len(saved_images)}.jpg"
 
     monkeypatch.setattr(
-        service.storage,
-        "save_processed_image",
-        fake_save,
+        service.supabase_storage,
+        "upload_processed_image",
+        fake_upload,
     )
 
     result = service.create_story(
@@ -358,14 +356,15 @@ def test_create_story_saves_cover_and_gallery_images(
             (b"gallery-1", "JPEG"),
             (b"gallery-2", "PNG"),
         ],
-        upload_root=str(tmp_path),
     )
 
     assert result["id"] == STORY_ID
     assert result["cover_image_path"] == f"{STORY_ID}/1.jpg"
-
     assert len(saved_images) == 3
-    assert all(item[2] == STORY_ID for item in saved_images)
+
+    assert saved_images[0][:2] == (b"cover", "JPEG")
+    assert saved_images[1][:2] == (b"gallery-1", "JPEG")
+    assert saved_images[2][:2] == (b"gallery-2", "PNG")
 
     gallery_calls = [
         call for call in cursor.execute.call_args_list
@@ -373,17 +372,23 @@ def test_create_story_saves_cover_and_gallery_images(
     ]
 
     assert len(gallery_calls) == 2
+
     assert gallery_calls[0].args[1] == (
-        STORY_ID, f"{STORY_ID}/2.jpg", 0
+        STORY_ID,
+        f"{STORY_ID}/2.jpg",
+        0,
     )
+
     assert gallery_calls[1].args[1] == (
-        STORY_ID, f"{STORY_ID}/3.jpg", 1
+        STORY_ID,
+        f"{STORY_ID}/3.jpg",
+        1,
     )
 
 
 def test_create_story_cleans_up_images_when_gallery_save_fails(
     fake_database, monkeypatch, tmp_path
-):
+    ):
     cursor, _ = fake_database
 
     cursor.fetchone.side_effect = [
@@ -392,46 +397,43 @@ def test_create_story_cleans_up_images_when_gallery_save_fails(
         story_row(),
     ]
 
-    saved_paths = []
     deleted_paths = []
 
-    def fake_save(processed, image_format, story_id, upload_root):
+    def fake_upload(processed, image_format, story_id):
         if processed == b"gallery":
-            raise service.storage.ImageStorageError(
+            raise service.supabase_storage.SupabaseStorageError(
                 "Simulated storage failure."
             )
 
-        path = f"{story_id}/cover.jpg"
-        saved_paths.append(path)
-        return path
+        return f"{story_id}/cover.jpg"
 
-    def fake_delete(path, upload_root):
+    def fake_delete(path):
         deleted_paths.append(path)
         return True
 
     monkeypatch.setattr(
-        service.storage,
-        "save_processed_image",
-        fake_save,
+        service.supabase_storage,
+        "upload_processed_image",
+        fake_upload,
     )
+
     monkeypatch.setattr(
-        service.storage,
+        service.supabase_storage,
         "delete_story_image",
         fake_delete,
     )
 
     with pytest.raises(
-        service.storage.ImageStorageError,
+        service.supabase_storage.SupabaseStorageError,
         match="Simulated storage failure",
     ):
         service.create_story(
             USER_ID,
             valid_values(),
             cover_image=(b"cover", "JPEG"),
-            gallery_images=[(b"gallery", "JPEG")],
-            upload_root=str(tmp_path),
+            gallery_images=[
+                (b"gallery", "JPEG"),
+            ],
         )
 
-    assert saved_paths == [f"{STORY_ID}/cover.jpg"]
-    assert deleted_paths == saved_paths
-
+    assert deleted_paths == [f"{STORY_ID}/cover.jpg"]
