@@ -51,16 +51,10 @@ load_dotenv()
 
 app = Flask(__name__)
 
-# Local Travel Stories photo storage.
-app.config["TRAVEL_STORIES_UPLOAD_FOLDER"] = os.path.join(
-    app.instance_path,
-    "travel-stories",
-)
+# Travel Stories image upload limits.
 app.config["TRAVEL_STORIES_MAX_IMAGE_BYTES"] = 5 * 1024 * 1024
 app.config["TRAVEL_STORIES_MAX_GALLERY_IMAGES"] = 10
 app.config["MAX_CONTENT_LENGTH"] = 56 * 1024 * 1024
-
-os.makedirs(app.config["TRAVEL_STORIES_UPLOAD_FOLDER"], exist_ok=True)
 
 app.register_blueprint(price_alerts_bp)
 app.register_blueprint(unsubscribe_bp)
