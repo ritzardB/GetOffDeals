@@ -20,6 +20,7 @@ ALLOWED_FORMATS = {
 MAX_IMAGE_BYTES = 5 * 1024 * 1024
 MAX_IMAGE_PIXELS = 25_000_000
 MAX_IMAGE_DIMENSION = 8000
+MAX_OUTPUT_DIMENSION = 1920
 
 
 class ImageValidationError(ValueError):
@@ -108,6 +109,12 @@ def _process_image(data):
                 source.load()
                 image = ImageOps.exif_transpose(source)
 
+                # Resize large photos for faster uploads and web delivery.
+                image.thumbnail(
+                    (MAX_OUTPUT_DIMENSION, MAX_OUTPUT_DIMENSION),
+                    Image.Resampling.LANCZOS,
+                )
+
                 if image_format == "JPEG":
                     if image.mode not in ("RGB", "L"):
                         background = Image.new("RGB", image.size, "white")
@@ -138,8 +145,9 @@ def _process_image(data):
 
                 if image_format == "JPEG":
                     save_options = {
-                        "quality": 88,
+                        "quality": 82,
                         "optimize": True,
+                        "progressive": True,
                     }
                 elif image_format == "PNG":
                     save_options = {
@@ -147,7 +155,7 @@ def _process_image(data):
                     }
                 elif image_format == "WEBP":
                     save_options = {
-                        "quality": 88,
+                        "quality": 82,
                         "method": 4,
                     }
 
