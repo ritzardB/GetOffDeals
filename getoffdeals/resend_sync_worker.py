@@ -166,13 +166,17 @@ def _retry_job(conn, job, exc):
             attempts,
         )
 
-def _current_subscriber_status(conn, email):
+
+def _current_subscriber_status(conn, email, *, for_update=False):
+    """Read subscriber status, optionally locking the PostgreSQL row."""
+    is_sqlite = _is_sqlite(conn)
+
     sql = (
         """
         SELECT status FROM subscribers
         WHERE LOWER(email) = LOWER(%s)
         """
-        if _is_sqlite(conn)
+        if is_sqlite
         else
         """
         SELECT status FROM public.subscribers
@@ -180,12 +184,18 @@ def _current_subscriber_status(conn, email):
         """
     )
 
+    # SQLite does not support SELECT FOR UPDATE.
+    # PostgreSQL holds this row lock until the transaction ends.
+    if for_update and not is_sqlite:
+        sql += " FOR UPDATE"
+
     row = _execute(conn, sql, (email,)).fetchone()
     return row["status"] if row else None
 
 
+
 def process_one(db_connect):
-    """Process one due job. Pass newsletter_db_connect as db_connect."""
+    """Process one due job while protecting subscriber consent."""
     with db_connect() as conn:
         job = _claim_job(conn)
 
@@ -193,50 +203,53 @@ def process_one(db_connect):
         return False
 
     try:
-        # Recheck consent immediately before calling Resend.
+        # Keep the subscriber row locked while checking consent
+        # and performing the corresponding Resend operation.
         with db_connect() as conn:
             current_status = _current_subscriber_status(
-                conn, job["email"]
+                conn,
+                job["email"],
+                for_update=True,
             )
 
-        if job["action"] == "add":
-            if current_status != "confirmed":
-                # Do not add pending or unsubscribed subscribers.
-                with db_connect() as conn:
-                    _finish_job(conn, job["id"])
-                return True
+            if job["action"] == "add":
+                if current_status != "confirmed":
+                    # Consent is no longer valid.
+                    # Do not create or reactivate the contact.
+                    skip_sync = True
+                else:
+                    skip_sync = False
 
-            result = add_confirmed_contact(job["email"])
+                    result = add_confirmed_contact(job["email"])
 
-            if result == "suppressed":
-                # Resend already has an unsubscribe suppression.
-                logger.info(
-                    "Resend contact remains suppressed: job_id=%s",
-                    job["id"],
-                )
+                    if result == "suppressed":
+                        logger.info(
+                            "Resend contact remains suppressed: job_id=%s",
+                            job["id"],
+                        )
 
-        elif job["action"] == "unsubscribe":
-            if current_status != "unsubscribed":
-                # Do not apply a stale unsubscribe to a currently
-                # confirmed subscriber.
-                with db_connect() as conn:
-                    _finish_job(conn, job["id"])
-                return True
+            elif job["action"] == "unsubscribe":
+                if current_status != "unsubscribed":
+                    # Ignore a stale unsubscribe operation.
+                    skip_sync = True
+                else:
+                    skip_sync = False
+                    unsubscribe_contact(job["email"])
 
-            unsubscribe_contact(job["email"])
-
-        else:
-            raise ValueError("Unsupported outbox action")
+            else:
+                raise ValueError("Unsupported outbox action")
 
     except ResendContactsError as exc:
         with db_connect() as conn:
             _retry_job(conn, job, exc)
         return True
 
+    # Complete the job after the subscriber transaction commits.
     with db_connect() as conn:
         _finish_job(conn, job["id"])
 
     return True
+
 
 
 def run_batch(db_connect, limit=BATCH_SIZE):

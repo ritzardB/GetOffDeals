@@ -142,3 +142,67 @@ def test_resend_failure_schedules_retry(worker_db, monkeypatch):
     assert job["next_attempt_at"] > datetime.now(
         timezone.utc
     ).isoformat()
+
+
+def test_successful_unsubscribe_marks_job_done(worker_db, monkeypatch):
+    with worker_db() as conn:
+        conn.execute(
+            "INSERT INTO subscribers (email, status) VALUES (?, ?)",
+            ("reader@example.com", "unsubscribed"),
+        )
+
+    queue_job(worker_db, "reader@example.com", action="unsubscribe")
+
+    calls = []
+
+    monkeypatch.setattr(
+        worker,
+        "unsubscribe_contact",
+        lambda email: calls.append(email) or "unsubscribed",
+    )
+
+    assert worker.process_one(worker_db) is True
+    assert calls == ["reader@example.com"]
+    assert read_job(worker_db)["status"] == "done"
+
+
+def test_stale_unsubscribe_does_not_suppress_confirmed_user(
+    worker_db, monkeypatch
+):
+    with worker_db() as conn:
+        conn.execute(
+            "INSERT INTO subscribers (email, status) VALUES (?, ?)",
+            ("reader@example.com", "confirmed"),
+        )
+
+    queue_job(worker_db, "reader@example.com", action="unsubscribe")
+
+    calls = []
+
+    monkeypatch.setattr(
+        worker,
+        "unsubscribe_contact",
+        lambda email: calls.append(email),
+    )
+
+    assert worker.process_one(worker_db) is True
+    assert calls == []
+    assert read_job(worker_db)["status"] == "done"
+
+
+def test_missing_subscriber_does_not_create_resend_contact(
+    worker_db, monkeypatch
+):
+    queue_job(worker_db, "missing@example.com")
+
+    calls = []
+
+    monkeypatch.setattr(
+        worker,
+        "add_confirmed_contact",
+        lambda email: calls.append(email),
+    )
+
+    assert worker.process_one(worker_db) is True
+    assert calls == []
+    assert read_job(worker_db)["status"] == "done"
