@@ -1,4 +1,17 @@
 
+import threading
+import uuid
+from concurrent.futures import ThreadPoolExecutor
+
+import getoffdeals.resend_sync_worker as worker
+
+from getoffdeals.newsletter_service import (
+    prepare_subscription,
+    confirm_subscription,
+    unsubscribe_subscription,
+)
+
+
 def test_postgres_newsletter_tables_are_available(postgres_test_db):
     with postgres_test_db["connect"]() as conn:
         result = conn.execute(
@@ -13,17 +26,6 @@ def test_postgres_newsletter_tables_are_available(postgres_test_db):
     assert result["outbox"] == "resend_sync_outbox"
 
 
-import threading
-import uuid
-from concurrent.futures import ThreadPoolExecutor
-
-from getoffdeals.newsletter_service import (
-    prepare_subscription,
-    confirm_subscription,
-    unsubscribe_subscription,
-)
-
-
 def test_concurrent_unsubscribe_only_creates_one_job(postgres_test_db):
     email = f"concurrent-{uuid.uuid4().hex}@example.com"
     postgres_test_db["track_email"](email)
@@ -31,19 +33,16 @@ def test_concurrent_unsubscribe_only_creates_one_job(postgres_test_db):
     # Prepare and confirm the subscriber.
     with postgres_test_db["connect"]() as conn:
         subscription = prepare_subscription(conn, email)
-
         assert confirm_subscription(
             conn, subscription["confirmation_token"]
         )
 
     token = subscription["unsubscribe_token"]
-
     barrier = threading.Barrier(2)
 
     def attempt_unsubscribe():
         with postgres_test_db["connect"]() as conn:
             barrier.wait(timeout=10)
-
             return unsubscribe_subscription(conn, token)
 
     with ThreadPoolExecutor(max_workers=2) as executor:
@@ -51,7 +50,6 @@ def test_concurrent_unsubscribe_only_creates_one_job(postgres_test_db):
             executor.submit(attempt_unsubscribe)
             for _ in range(2)
         ]
-
         results = [future.result(timeout=20) for future in futures]
 
     assert sorted(results) == [False, True]
@@ -84,17 +82,6 @@ def test_concurrent_unsubscribe_only_creates_one_job(postgres_test_db):
 def test_add_operation_and_unsubscribe_are_serialized(
     postgres_test_db, monkeypatch
 ):
-    import threading
-    import uuid
-    from concurrent.futures import ThreadPoolExecutor
-
-    import getoffdeals.resend_sync_worker as worker
-    from getoffdeals.newsletter_service import (
-        prepare_subscription,
-        confirm_subscription,
-        unsubscribe_subscription,
-    )
-
     email = f"race-{uuid.uuid4().hex}@example.com"
     postgres_test_db["track_email"](email)
 
@@ -111,7 +98,7 @@ def test_add_operation_and_unsubscribe_are_serialized(
             """
             SELECT id, email, action, attempts
             FROM public.resend_sync_outbox
-            WHERE email = %s
+            WHERE LOWER(email) = LOWER(%s)
               AND action = 'add'
               AND status = 'pending'
             ORDER BY created_at
@@ -124,17 +111,34 @@ def test_add_operation_and_unsubscribe_are_serialized(
             conn.commit()
             return None
 
-        conn.execute(
+        lease_token = str(uuid.uuid4())
+
+        cursor = conn.execute(
             """
             UPDATE public.resend_sync_outbox
-            SET status = 'processing', updated_at = %s
-            WHERE id = %s AND status = 'pending'
+            SET status = 'processing',
+                lease_token = %s,
+                updated_at = %s
+            WHERE id = %s
+              AND status = 'pending'
             """,
-            (worker._timestamp(worker._now()), row["id"]),
+            (
+                lease_token,
+                worker._timestamp(worker._now()),
+                row["id"],
+            ),
         )
 
+        if cursor.rowcount != 1:
+            conn.commit()
+            return None
+
         conn.commit()
-        return dict(row)
+
+        claimed_job = dict(row)
+        claimed_job["lease_token"] = lease_token
+
+        return claimed_job
 
     monkeypatch.setattr(worker, "_claim_job", claim_test_job)
 
@@ -147,7 +151,9 @@ def test_add_operation_and_unsubscribe_are_serialized(
         add_started.set()
 
         if not release_add.wait(timeout=10):
-            raise TimeoutError("Test timed out waiting to release Resend add")
+            raise TimeoutError(
+                "Test timed out waiting to release Resend add"
+            )
 
         return "added"
 
@@ -219,15 +225,6 @@ def test_add_operation_and_unsubscribe_are_serialized(
 def test_stale_unsubscribe_does_not_suppress_reconfirmed_subscriber(
     postgres_test_db, monkeypatch
 ):
-    import uuid
-
-    import getoffdeals.resend_sync_worker as worker
-    from getoffdeals.newsletter_service import (
-        prepare_subscription,
-        confirm_subscription,
-        unsubscribe_subscription,
-    )
-
     email = f"reconfirmed-{uuid.uuid4().hex}@example.com"
     postgres_test_db["track_email"](email)
 
@@ -246,19 +243,6 @@ def test_stale_unsubscribe_does_not_suppress_reconfirmed_subscriber(
     # This tests the worker's stale-job safeguard only.
     # It does not test the application's re-subscription workflow.
     with postgres_test_db["connect"]() as conn:
-        conn.execute(
-            """
-            UPDATE public.subscribers
-            SET status = 'confirmed',
-                consent = TRUE,
-                confirmed_at = NOW()
-            WHERE LOWER(email) = LOWER(%s)
-            """,
-            (email,),
-        )
-
-        # Confirm through a fresh, valid subscription flow instead.
-        # This test directly establishes the current confirmed state.
         conn.execute(
             """
             UPDATE public.subscribers
@@ -289,20 +273,39 @@ def test_stale_unsubscribe_does_not_suppress_reconfirmed_subscriber(
             conn.commit()
             return None
 
-        conn.execute(
+        lease_token = str(uuid.uuid4())
+
+        cursor = conn.execute(
             """
             UPDATE public.resend_sync_outbox
-            SET status = 'processing', updated_at = %s
-            WHERE id = %s AND status = 'pending'
+            SET status = 'processing',
+                lease_token = %s,
+                updated_at = %s
+            WHERE id = %s
+              AND status = 'pending'
             """,
-            (worker._timestamp(worker._now()), row["id"]),
+            (
+                lease_token,
+                worker._timestamp(worker._now()),
+                row["id"],
+            ),
         )
+
+        if cursor.rowcount != 1:
+            conn.commit()
+            return None
+
         conn.commit()
-        return dict(row)
+
+        claimed_job = dict(row)
+        claimed_job["lease_token"] = lease_token
+
+        return claimed_job
 
     monkeypatch.setattr(worker, "_claim_job", claim_test_job)
 
     unsubscribe_calls = []
+
     monkeypatch.setattr(
         worker,
         "unsubscribe_contact",

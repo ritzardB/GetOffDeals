@@ -2,9 +2,10 @@
 """Process durable Resend contact synchronization jobs."""
 
 import logging
-from datetime import datetime, timedelta, timezone
-
 import sqlite3
+import uuid
+
+from datetime import datetime, timedelta, timezone
 
 from getoffdeals.newsletter_service import _execute
 from getoffdeals.resend_contacts import (
@@ -41,20 +42,23 @@ def _timestamp(value):
 
 
 def _claim_job(conn):
-    """Claim one due job, reclaiming stale worker leases."""
+    """Claim one due job and assign a unique processing lease."""
     table = _table(conn)
     now = _now()
     now_text = _timestamp(now)
     stale_before = _timestamp(
         now - timedelta(minutes=PROCESSING_LEASE_MINUTES)
     )
+    lease_token = str(uuid.uuid4())
 
-    # Recover jobs left processing after a worker crash.
+    # Recover jobs whose processing lease has expired.
     _execute(
         conn,
         f"""
         UPDATE {table}
-        SET status = 'pending', updated_at = %s
+        SET status = 'pending',
+            lease_token = NULL,
+            updated_at = %s
         WHERE status = 'processing'
           AND updated_at < %s
         """,
@@ -62,6 +66,7 @@ def _claim_job(conn):
     )
 
     suffix = "" if _is_sqlite(conn) else " FOR UPDATE SKIP LOCKED"
+
     job = _execute(
         conn,
         f"""
@@ -84,10 +89,13 @@ def _claim_job(conn):
         conn,
         f"""
         UPDATE {table}
-        SET status = 'processing', updated_at = %s
-        WHERE id = %s AND status = 'pending'
+        SET status = 'processing',
+            lease_token = %s,
+            updated_at = %s
+        WHERE id = %s
+          AND status = 'pending'
         """,
-        (now_text, job["id"]),
+        (lease_token, now_text, job["id"]),
     )
 
     if cursor.rowcount != 1:
@@ -95,43 +103,73 @@ def _claim_job(conn):
         return None
 
     conn.commit()
-    return dict(job)
+
+    claimed_job = dict(job)
+    claimed_job["lease_token"] = lease_token
+
+    return claimed_job
 
 
-def _finish_job(conn, job_id):
+def _owns_job(conn, job):
+    """Return whether this worker still owns the processing lease."""
+    table = _table(conn)
+
+    row = _execute(
+        conn,
+        f"""
+        SELECT 1
+        FROM {table}
+        WHERE id = %s
+          AND status = 'processing'
+          AND lease_token = %s
+        """,
+        (job["id"], job["lease_token"]),
+    ).fetchone()
+
+    return row is not None
+
+
+def _finish_job(conn, job):
+    """Complete a job only if the supplied lease is still current."""
     table = _table(conn)
     now = _timestamp(_now())
 
-    _execute(
+    cursor = _execute(
         conn,
         f"""
         UPDATE {table}
         SET status = 'done',
+            lease_token = NULL,
             last_error = NULL,
             updated_at = %s
         WHERE id = %s
+          AND status = 'processing'
+          AND lease_token = %s
         """,
-        (now, job_id),
+        (now, job["id"], job["lease_token"]),
     )
+
     conn.commit()
+    return cursor.rowcount == 1
 
 
 def _retry_job(conn, job, exc):
+    """Schedule a retry only if this worker still owns the lease."""
     table = _table(conn)
     attempts = job["attempts"] + 1
     now = _now()
 
-    # Mark the job permanently failed after MAX_ATTEMPTS.
     exhausted = attempts >= MAX_ATTEMPTS
+
     next_attempt = _timestamp(
         now + timedelta(minutes=min(2 ** (attempts - 1), 360))
     )
 
-    # Never persist email addresses or provider response bodies.
+    # Store only the exception class, never email or provider response data.
     error = type(exc).__name__
     status = "failed" if exhausted else "pending"
 
-    _execute(
+    cursor = _execute(
         conn,
         f"""
         UPDATE {table}
@@ -139,8 +177,11 @@ def _retry_job(conn, job, exc):
             status = %s,
             next_attempt_at = %s,
             last_error = %s,
+            lease_token = NULL,
             updated_at = %s
         WHERE id = %s
+          AND status = 'processing'
+          AND lease_token = %s
         """,
         (
             attempts,
@@ -149,9 +190,19 @@ def _retry_job(conn, job, exc):
             error,
             _timestamp(now),
             job["id"],
+            job["lease_token"],
         ),
     )
+
     conn.commit()
+
+    # A newer worker may already own this job.
+    if cursor.rowcount != 1:
+        logger.info(
+            "Resend sync retry ignored because lease was lost: job_id=%s",
+            job["id"],
+        )
+        return False
 
     if exhausted:
         logger.error(
@@ -165,6 +216,8 @@ def _retry_job(conn, job, exc):
             job["id"],
             attempts,
         )
+
+    return True
 
 
 def _current_subscriber_status(conn, email, *, for_update=False):
@@ -184,8 +237,6 @@ def _current_subscriber_status(conn, email, *, for_update=False):
         """
     )
 
-    # SQLite does not support SELECT FOR UPDATE.
-    # PostgreSQL holds this row lock until the transaction ends.
     if for_update and not is_sqlite:
         sql += " FOR UPDATE"
 
@@ -193,9 +244,8 @@ def _current_subscriber_status(conn, email, *, for_update=False):
     return row["status"] if row else None
 
 
-
 def process_one(db_connect):
-    """Process one due job while protecting subscriber consent."""
+    """Process one due job while protecting consent and lease ownership."""
     with db_connect() as conn:
         job = _claim_job(conn)
 
@@ -203,8 +253,8 @@ def process_one(db_connect):
         return False
 
     try:
-        # Keep the subscriber row locked while checking consent
-        # and performing the corresponding Resend operation.
+        # Hold the subscriber row lock while checking consent and
+        # performing the corresponding Resend operation.
         with db_connect() as conn:
             current_status = _current_subscriber_status(
                 conn,
@@ -212,14 +262,32 @@ def process_one(db_connect):
                 for_update=True,
             )
 
-            if job["action"] == "add":
-                if current_status != "confirmed":
-                    # Consent is no longer valid.
-                    # Do not create or reactivate the contact.
-                    skip_sync = True
-                else:
-                    skip_sync = False
+            should_sync = False
 
+            if job["action"] == "add":
+                should_sync = current_status == "confirmed"
+
+            elif job["action"] == "unsubscribe":
+                should_sync = current_status == "unsubscribed"
+
+            else:
+                raise ValueError("Unsupported outbox action")
+
+            if should_sync:
+                # Check lease ownership immediately before the external call.
+                # Use a separate connection so the subscriber transaction
+                # remains open and its row lock is retained.
+                with db_connect() as lease_conn:
+                    still_owner = _owns_job(lease_conn, job)
+
+                if not still_owner:
+                    logger.info(
+                        "Resend sync skipped because lease was lost: job_id=%s",
+                        job["id"],
+                    )
+                    return True
+
+                if job["action"] == "add":
                     result = add_confirmed_contact(job["email"])
 
                     if result == "suppressed":
@@ -228,28 +296,26 @@ def process_one(db_connect):
                             job["id"],
                         )
 
-            elif job["action"] == "unsubscribe":
-                if current_status != "unsubscribed":
-                    # Ignore a stale unsubscribe operation.
-                    skip_sync = True
-                else:
-                    skip_sync = False
+                elif job["action"] == "unsubscribe":
                     unsubscribe_contact(job["email"])
 
-            else:
-                raise ValueError("Unsupported outbox action")
-
-    except ResendContactsError as exc:
+    except Exception as exc:
         with db_connect() as conn:
             _retry_job(conn, job, exc)
+
         return True
 
-    # Complete the job after the subscriber transaction commits.
+    # Completion is guarded by the original lease token.
     with db_connect() as conn:
-        _finish_job(conn, job["id"])
+        completed = _finish_job(conn, job)
+
+    if not completed:
+        logger.info(
+            "Resend sync completion ignored because lease was lost: job_id=%s",
+            job["id"],
+        )
 
     return True
-
 
 
 def run_batch(db_connect, limit=BATCH_SIZE):
@@ -259,6 +325,7 @@ def run_batch(db_connect, limit=BATCH_SIZE):
     for _ in range(limit):
         if not process_one(db_connect):
             break
+
         processed += 1
 
     return processed
@@ -269,6 +336,7 @@ def main():
 
     count = run_batch(get_connection)
     logger.info("Resend sync worker processed %s jobs", count)
+
 
 if __name__ == "__main__":
     logging.basicConfig(level=logging.INFO)
