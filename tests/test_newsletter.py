@@ -349,6 +349,47 @@ def test_unsubscribe_rejects_pending_subscriber(
     assert row["status"] == "pending"
 
 
+def test_unsubscribe_does_not_enqueue_when_update_affects_no_rows(
+    monkeypatch, tmp_path
+):
+    setup_newsletter_db(monkeypatch, tmp_path)
+
+    with app_module.db_connect() as conn:
+        subscription = newsletter_service.prepare_subscription(
+            conn, "reader@example.com"
+        )
+        newsletter_service.confirm_subscription(
+            conn, subscription["confirmation_token"]
+        )
+
+        # Simulate another database operation changing the row
+        # before the unsubscribe UPDATE can take effect.
+        conn.execute(
+            """
+            CREATE TRIGGER ignore_unsubscribe_update
+            BEFORE UPDATE OF status ON subscribers
+            WHEN OLD.status = 'confirmed'
+            BEGIN
+                SELECT RAISE(IGNORE);
+            END
+            """
+        )
+
+        jobs_before = conn.execute(
+            "SELECT COUNT(*) AS total FROM resend_sync_outbox"
+        ).fetchone()["total"]
+
+        result = newsletter_service.unsubscribe_subscription(
+            conn, subscription["unsubscribe_token"]
+        )
+
+        jobs_after = conn.execute(
+            "SELECT COUNT(*) AS total FROM resend_sync_outbox"
+        ).fetchone()["total"]
+
+    assert result is False
+    assert jobs_after == jobs_before
+
 
 def test_signup_can_retry_after_confirmation_email_failure(
     client, monkeypatch, tmp_path
