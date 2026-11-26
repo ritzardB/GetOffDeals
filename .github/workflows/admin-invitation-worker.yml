@@ -1,0 +1,42 @@
+name: GetOffDeals Admin Invitation Worker
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: getoffdeals-admin-invitation
+  cancel-in-progress: false
+
+jobs:
+  send-admin-invitations:
+    name: Process administrator invitation queue
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    env:
+      DATABASE_URL: ${{ secrets.DATABASE_URL }}
+      RESEND_API_KEY: ${{ secrets.RESEND_API_KEY }}
+      EMAIL_FROM: ${{ secrets.EMAIL_FROM }}
+      FLASK_SECRET_KEY: ${{ secrets.FLASK_SECRET_KEY }}
+      PUBLIC_BASE_URL: https://getoffdeals.com
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+          cache: pip
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+
+      - name: Run administrator invitation worker
+        run: python -m getoffdeals.admin_invitation_worker

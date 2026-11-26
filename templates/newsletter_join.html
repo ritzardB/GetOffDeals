@@ -1,0 +1,101 @@
+
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Join GetOffDeals Newsletter</title>
+  <style>
+    body {
+      margin: 0;
+      padding: 32px 16px;
+      background: #f6f8f4;
+      color: #17202a;
+      font-family: Arial, sans-serif;
+      line-height: 1.6;
+    }
+    main {
+      max-width: 560px;
+      margin: 40px auto;
+      padding: 28px;
+      background: #fff;
+      border-radius: 12px;
+    }
+    button {
+      padding: 12px 18px;
+      border: 0;
+      border-radius: 6px;
+      background: #c8f169;
+      color: #14202b;
+      font-weight: bold;
+      cursor: pointer;
+    }
+    .email {
+      font-weight: bold;
+      overflow-wrap: anywhere;
+    }
+  </style>
+</head>
+<body>
+  <main>
+    {% if result == "ready" %}
+      <h1>Join the GetOffDeals Newsletter</h1>
+      <p>
+        You are invited to receive occasional flight deals
+        and travel updates from GetOffDeals.
+      </p>
+      <p>Email address:</p>
+      <p class="email">{{ email }}</p>
+      <p>
+        Subscribing is optional. You will receive a separate
+        confirmation email before any newsletter updates begin.
+      </p>
+      <form method="post">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+        <button type="submit">Yes, subscribe me</button>
+      </form>
+
+    {% elif result == "pending" %}
+      <h1>One more step!</h1>
+      <p>
+        We have sent a confirmation email to
+        <strong>{{ email }}</strong>.
+      </p>
+      <p>Please open that email and confirm your subscription.</p>
+
+    {% elif result == "retry" %}
+      <h1>Confirmation email not sent</h1>
+      <p>
+        Your newsletter request has been saved, but we couldn't
+        send the confirmation email to <strong>{{ email }}</strong>.
+      </p>
+      <p>You can safely try again below.</p>
+
+      <form method="post">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+        <button type="submit">Retry sending confirmation email</button>
+      </form>
+
+    {% elif result == "already_confirmed" %}
+      <h1>You're already subscribed!</h1>
+      <p>This email address is already confirmed for GetOffDeals updates.</p>
+
+    {% elif result == "already_unsubscribed" %}
+      <h1>Subscription unavailable</h1>
+      <p>
+        This email address was previously unsubscribed.
+        We have not changed that preference.
+      </p>
+
+    {% else %}
+      <h1>Invitation unavailable</h1>
+      <p>
+        This invitation is invalid, expired, or has already been used.
+        Please contact GetOffDeals if you need assistance.
+      </p>
+    {% endif %}
+
+    <p><a href="/">Return to GetOffDeals</a></p>
+  </main>
+</body>
+</html>

@@ -44,6 +44,8 @@ app.register_blueprint(price_alerts_bp)
 app.register_blueprint(unsubscribe_bp)
 app.config["JSON_SORT_KEYS"] = False
 
+from getoffdeals.admin_contacts import admin_contacts_bp
+app.register_blueprint(admin_contacts_bp, url_prefix="/admin")
 
 def sync_authenticated_user(user_id, email, first_name="", last_name=""):
     """Synchronize a Supabase Auth user into public.users."""
@@ -1633,6 +1635,178 @@ def newsletter_confirm(token):
                 render_template(
                     "newsletter_confirm.html",
                     result=result,
+                )
+            )
+
+    response.headers["Cache-Control"] = "no-store"
+    response.headers["Referrer-Policy"] = "no-referrer"
+    response.headers["X-Content-Type-Options"] = "nosniff"
+    return response
+
+
+@app.route(
+    "/newsletter/join/<token>",
+    methods=["GET", "POST"],
+)
+def newsletter_join(token):
+    import hmac
+    import secrets
+
+    from getoffdeals.newsletter_invitation_service import (
+        consume_invitation,
+        get_invitation_email,
+        restore_invitation,
+    )
+
+    if not isinstance(token, str) or not 20 <= len(token) <= 200:
+        abort(404)
+
+    if request.method == "GET":
+        try:
+            with newsletter_db_connect() as conn:
+                email = get_invitation_email(conn, token)
+        except (sqlite3.Error, psycopg.Error):
+            app.logger.exception("Could not inspect newsletter invitation")
+            abort(500)
+
+        result = "ready" if email else "unavailable"
+        csrf_token = None
+
+        if email:
+            csrf_token = secrets.token_urlsafe(32)
+            session["newsletter_join_csrf_token"] = csrf_token
+
+        response = app.make_response(
+            render_template(
+                "newsletter_join.html",
+                result=result,
+                email=email,
+                csrf_token=csrf_token,
+            )
+        )
+
+    else:
+        expected = session.get("newsletter_join_csrf_token")
+        submitted = request.form.get("csrf_token", "")
+
+        if (
+            not isinstance(expected, str)
+            or not isinstance(submitted, str)
+            or not hmac.compare_digest(expected, submitted)
+        ):
+            abort(400, description="Invalid form token. Please reopen the invitation.")
+
+        session.pop("newsletter_join_csrf_token", None)
+
+        try:
+            with newsletter_db_connect() as conn:
+                email = consume_invitation(conn, token)
+
+                if not email:
+                    result = "unavailable"
+                    subscription = None
+                else:
+                    subscription = prepare_subscription(conn, email)
+                    result = subscription["status"]
+
+        except (sqlite3.Error, psycopg.Error):
+            app.logger.exception("Could not process newsletter invitation")
+            abort(500)
+
+        if result == "pending":
+            public_base_url = os.getenv("PUBLIC_BASE_URL", "").strip().rstrip("/")
+
+            if not public_base_url.startswith("https://"):
+                app.logger.error("PUBLIC_BASE_URL must use HTTPS")
+
+                try:
+                    with newsletter_db_connect() as conn:
+                        restored = restore_invitation(conn, token)
+                except (sqlite3.Error, psycopg.Error):
+                    app.logger.exception(
+                        "Could not restore invitation after URL configuration failure"
+                    )
+                    abort(500)
+
+                if not restored:
+                    app.logger.error(
+                        "Could not restore invitation after URL configuration failure"
+                    )
+                    abort(500)
+
+                abort(
+                    503,
+                    description="Newsletter confirmation is temporarily unavailable. Please try again later.",
+                )
+
+            confirmation_url = (
+                f"{public_base_url}/newsletter/confirm/"
+                f"{subscription['confirmation_token']}"
+            )
+            unsubscribe_url = (
+                f"{public_base_url}/newsletter/unsubscribe/"
+                f"{subscription['unsubscribe_token']}"
+            )
+
+            try:
+                send_newsletter_confirmation(
+                    email,
+                    confirmation_url,
+                    unsubscribe_url,
+                )
+
+            except Exception:
+                app.logger.exception(
+                    "Could not send invitation newsletter confirmation"
+                )
+
+                try:
+                    with newsletter_db_connect() as conn:
+                        restored = restore_invitation(conn, token)
+                except (sqlite3.Error, psycopg.Error):
+                    app.logger.exception(
+                        "Could not restore newsletter invitation"
+                    )
+                    abort(500)
+
+                if restored:
+                    retry_csrf_token = secrets.token_urlsafe(32)
+                    session["newsletter_join_csrf_token"] = (
+                        retry_csrf_token
+                    )
+
+                    response = app.make_response(
+                        render_template(
+                            "newsletter_join.html",
+                            result="retry",
+                            email=email,
+                            csrf_token=retry_csrf_token,
+                        )
+                    )
+                    response.status_code = 503
+                else:
+                    response = app.make_response(
+                        render_template(
+                            "newsletter_join.html",
+                            result="unavailable",
+                            email=None,
+                        )
+                    )
+
+            else:
+                response = app.make_response(
+                    render_template(
+                        "newsletter_join.html",
+                        result="pending",
+                        email=email,
+                    )
+                )
+        else:
+            response = app.make_response(
+                render_template(
+                    "newsletter_join.html",
+                    result=result,
+                    email=email,
                 )
             )
 

@@ -1,0 +1,375 @@
+
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#101b2b">
+  <title>Contact Management | GetOffDeals Admin</title>
+
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=Manrope:wght@600;700;800&display=swap" rel="stylesheet">
+
+  <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/admin-contacts.css') }}">
+</head>
+
+<body class="admin-contacts-page">
+
+<header class="nav-wrap">
+  <nav class="nav container">
+    <a class="brand" href="/">
+      <img
+        src="{{ url_for('static', filename='images/getoffdeals_logo.png') }}"
+        alt="GetOffDeals"
+        class="brand-logo"
+      >
+    </a>
+
+    <div class="admin-nav-links">
+      <span class="admin-nav-label">ADMINISTRATION</span>
+      <a href="/">View website ↗</a>
+      <form action="/auth/logout" method="post">
+        <button type="submit" class="admin-signout">Sign out</button>
+      </form>
+    </div>
+  </nav>
+</header>
+
+<main class="admin-main">
+
+  {% with messages = get_flashed_messages(with_categories=true) %}
+    {% if messages %}
+      <section class="admin-flash-messages" aria-live="polite">
+        {% for category, message in messages %}
+          <div class="admin-flash admin-flash-{{ category }}">
+            {{ message }}
+          </div>
+        {% endfor %}
+      </section>
+    {% endif %}
+  {% endwith %}
+
+  <section class="admin-heading">
+    <div>
+      <span class="admin-eyebrow">GETOFFDEALS CONTROL CENTER</span>
+      <h1>Contact management.</h1>
+      <p>
+        Manage registered accounts and monitor newsletter consent.
+        Account communications and promotional subscriptions remain separate.
+      </p>
+    </div>
+
+    <a
+      class="admin-export-button"
+      href="{{ url_for('admin_contacts.export_contacts', q=search, status=status) }}"
+    >
+      <span aria-hidden="true">↓</span> Export CSV
+    </a>
+  </section>
+
+  <section class="admin-stats" aria-label="Contact statistics">
+
+    <article class="admin-stat-card">
+      <span class="admin-stat-label">REGISTERED ACCOUNTS</span>
+      <strong>{{ statistics.registered_users }}</strong>
+      <span class="admin-stat-note">All registered users</span>
+    </article>
+
+    <article class="admin-stat-card admin-stat-confirmed">
+      <span class="admin-stat-label">CONFIRMED SUBSCRIBERS</span>
+      <strong>{{ statistics.confirmed_subscribers }}</strong>
+      <span class="admin-stat-note">Newsletter opt-in confirmed</span>
+    </article>
+
+    <article class="admin-stat-card">
+      <span class="admin-stat-label">NEVER SUBSCRIBED</span>
+      <strong>{{ statistics.registered_not_subscribed }}</strong>
+      <span class="admin-stat-note">No newsletter subscription record</span>
+    </article>
+
+    <article class="admin-stat-card">
+      <span class="admin-stat-label">PENDING CONFIRMATION</span>
+      <strong>{{ statistics.pending_subscribers }}</strong>
+      <span class="admin-stat-note">Awaiting email confirmation</span>
+    </article>
+
+    <article class="admin-stat-card admin-stat-unsubscribed">
+      <span class="admin-stat-label">UNSUBSCRIBED</span>
+      <strong>{{ statistics.unsubscribed_subscribers }}</strong>
+      <span class="admin-stat-note">Previously opted out</span>
+    </article>
+
+  </section>
+
+  <section class="admin-directory">
+
+    <div class="admin-directory-heading">
+      <div>
+        <span class="admin-eyebrow">ACCOUNT DIRECTORY</span>
+        <h2>Registered users</h2>
+        <p>
+          Search accounts and review their newsletter subscription status.
+        </p>
+      </div>
+
+      <span class="admin-result-count">
+        {{ total }} record{% if total != 1 %}s{% endif %}
+      </span>
+    </div>
+
+    <form
+      class="admin-filters"
+      method="get"
+      action="{{ url_for('admin_contacts.contacts') }}"
+    >
+      <div class="admin-search-field">
+        <label for="contact-search">Search contacts</label>
+        <input
+          id="contact-search"
+          type="search"
+          name="q"
+          value="{{ search }}"
+          placeholder="Search name or email address..."
+          maxlength="200"
+        >
+      </div>
+
+      <div class="admin-status-field">
+        <label for="contact-status">Newsletter status</label>
+        <select id="contact-status" name="status">
+          <option value="all" {% if status == "all" %}selected{% endif %}>
+            All registered users
+          </option>
+          <option value="confirmed" {% if status == "confirmed" %}selected{% endif %}>
+            Confirmed subscribers
+          </option>
+          <option value="not_subscribed" {% if status == "not_subscribed" %}selected{% endif %}>
+            Never subscribed
+          </option>
+          <option value="pending" {% if status == "pending" %}selected{% endif %}>
+            Pending confirmation
+          </option>
+          <option value="unsubscribed" {% if status == "unsubscribed" %}selected{% endif %}>
+            Unsubscribed
+          </option>
+        </select>
+      </div>
+
+      <button type="submit" class="admin-filter-button">
+        Apply filters
+      </button>
+
+      <a
+        class="admin-clear-button"
+        href="{{ url_for('admin_contacts.contacts') }}"
+      >
+        Clear
+      </a>
+    </form>
+
+    <div class="admin-table-wrap">
+      <table class="admin-contact-table">
+        <thead>
+          <tr>
+            <th>CONTACT</th>
+            <th>REGISTRATION DATE</th>
+            <th>NEWSLETTER STATUS</th>
+            <th>INVITATION DELIVERY</th>
+            <th>CONFIRMATION DATE</th>
+            <th>ACTION</th>
+          </tr>
+        </thead>
+
+        <tbody>
+          {% for contact in contacts %}
+            <tr>
+              <td>
+                <div class="admin-contact-name">
+                  {% if contact.first_name or contact.last_name %}
+                    {{ contact.first_name or "" }} {{ contact.last_name or "" }}
+                  {% else %}
+                    <span class="admin-no-name">Traveller</span>
+                  {% endif %}
+                </div>
+                <div class="admin-contact-email">
+                  {{ contact.email }}
+                </div>
+              </td>
+
+              <td>
+                {% if contact.created_at %}
+                  {{ contact.created_at.strftime("%d %b %Y") }}
+                {% else %}
+                  —
+                {% endif %}
+              </td>
+
+              <td>
+                {% set newsletter_status = contact.newsletter_status or "not_subscribed" %}
+
+                {% if newsletter_status == "confirmed" %}
+                  <span class="admin-status-badge status-confirmed">
+                    Confirmed
+                  </span>
+                {% elif newsletter_status == "pending" %}
+                  <span class="admin-status-badge status-pending">
+                    Pending
+                  </span>
+                {% elif newsletter_status == "unsubscribed" %}
+                  <span class="admin-status-badge status-unsubscribed">
+                    Unsubscribed
+                  </span>
+                {% else %}
+                  <span class="admin-status-badge status-none">
+                    Never subscribed
+                  </span>
+                {% endif %}
+              </td>
+
+              <td>
+                {% set delivery_status = contact.invitation_delivery_status %}
+
+                {% if delivery_status == "pending" %}
+                  <span class="admin-status-badge status-pending">
+                    Pending
+                  </span>
+                {% elif delivery_status == "processing" %}
+                  <span class="admin-status-badge status-processing">
+                    Processing
+                  </span>
+                {% elif delivery_status == "sent" %}
+                  <span class="admin-status-badge status-sent">
+                    Sent
+                  </span>
+                  {% if contact.invitation_sent_at %}
+                    <div class="admin-invitation-date">
+                      {{ contact.invitation_sent_at.strftime("%d %b %Y") }}
+                    </div>
+                  {% endif %}
+                {% elif delivery_status == "failed" %}
+                  <span class="admin-status-badge status-failed">
+                    Failed
+                  </span>
+                  {% if contact.invitation_last_error %}
+                    <div class="admin-invitation-error"
+                        title="{{ contact.invitation_last_error }}">
+                      Delivery error recorded
+                    </div>
+                  {% endif %}
+                {% elif delivery_status == "skipped" %}
+                  <span class="admin-status-badge status-skipped">
+                    Skipped
+                  </span>
+                {% else %}
+                  <span class="admin-status-badge status-none">
+                    No invitation
+                  </span>
+                {% endif %}
+              </td>
+
+              <td>
+                {% if contact.confirmed_at %}
+                  {{ contact.confirmed_at.strftime("%d %b %Y") }}
+                {% else %}
+                  —
+                {% endif %}
+              </td>
+
+              <td class="admin-action-cell">
+                {% if not contact.newsletter_status
+                    and contact.invitation_delivery_status not in ["pending", "processing"] %}
+                  <form
+                    method="post"
+                    action="{{ url_for(
+                      'admin_contacts.invite_contact',
+                      user_id=contact.id
+                    ) }}"
+                    onsubmit="return confirm(
+                      'Queue an optional newsletter invitation to this user?'
+                    );"
+                  >
+                    <input
+                      type="hidden"
+                      name="csrf_token"
+                      value="{{ csrf_token }}"
+                    >
+
+                    <input type="hidden" name="q" value="{{ search }}">
+                    <input type="hidden" name="status" value="{{ status }}">
+                    <input type="hidden" name="page" value="{{ page }}">
+
+                    <button type="submit" class="admin-invite-button">
+                      Queue invitation
+                    </button>
+                  </form>
+                {% else %}
+                  <span class="admin-no-action">—</span>
+                {% endif %}
+              </td>
+            </tr>
+          {% else %}
+            <tr>
+              <td colspan="6" class="admin-empty-state">
+                <span aria-hidden="true">⌕</span>
+                <strong>No registered users found</strong>
+                <p>Try changing your search or newsletter status filter.</p>
+              </td>
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+
+    {% if total_pages > 1 %}
+      <nav class="admin-pagination" aria-label="Contact pages">
+
+        <span>
+          Page {{ page }} of {{ total_pages }}
+        </span>
+
+        <div class="admin-pagination-actions">
+          {% if page > 1 %}
+            <a href="{{ url_for('admin_contacts.contacts', q=search, status=status, page=page-1) }}">
+              ← Previous
+            </a>
+          {% else %}
+            <span class="pagination-disabled">← Previous</span>
+          {% endif %}
+
+          {% if page < total_pages %}
+            <a href="{{ url_for('admin_contacts.contacts', q=search, status=status, page=page+1) }}">
+              Next →
+            </a>
+          {% else %}
+            <span class="pagination-disabled">Next →</span>
+          {% endif %}
+        </div>
+
+      </nav>
+    {% endif %}
+
+  </section>
+
+  <section class="admin-privacy-note">
+    <span aria-hidden="true">ⓘ</span>
+    <p>
+      <strong>Privacy and consent:</strong>
+      Registration does not constitute newsletter consent.
+      Only contacts with confirmed newsletter subscriptions belong in the
+      promotional mailing list. Unsubscribed users must remain unsubscribed
+      unless they explicitly opt in again.
+    </p>
+  </section>
+
+</main>
+
+<footer class="admin-footer">
+  <div class="container">
+    GetOffDeals Admin · Contact Management
+  </div>
+</footer>
+
+</body>
+</html>

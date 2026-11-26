@@ -97,3 +97,84 @@ def send_newsletter_confirmation(
         </div>
         """,
     })
+
+
+def send_newsletter_invitation(
+    to_email,
+    invitation_url,
+    idempotency_key=None,
+):
+    """Send an optional newsletter invitation with retry protection."""
+    api_key = os.getenv("RESEND_API_KEY")
+    sender = os.getenv("EMAIL_FROM")
+
+    if not api_key or not sender:
+        raise RuntimeError("Resend email configuration is missing.")
+
+    safe_url = escape(invitation_url, quote=True)
+
+    resend.api_key = api_key
+
+    params = {
+        "from": sender,
+        "to": [to_email],
+        "subject": "An invitation from GetOffDeals",
+        "html": f"""
+        <div style="
+            font-family:Arial,sans-serif;
+            line-height:1.7;
+            max-width:600px;
+            margin:auto;
+            color:#24313d;
+        ">
+          <h2>Stay inspired. Discover more ways to travel.</h2>
+
+          <p>Hello Traveller,</p>
+
+          <p>
+            We'd like to invite you to subscribe to the
+            GetOffDeals newsletter.
+          </p>
+
+          <p>
+            Receive occasional flight deals, travel inspiration,
+            and updates to help you discover better travel opportunities.
+          </p>
+
+          <p style="text-align:center;margin:30px 0;">
+            <a href="{safe_url}" style="
+                display:inline-block;
+                padding:14px 22px;
+                background:#c8f169;
+                color:#14202b;
+                text-decoration:none;
+                font-weight:bold;
+                border-radius:8px;
+            ">
+              View newsletter invitation
+            </a>
+          </p>
+
+          <p>
+            Subscribing is entirely optional. Clicking this link
+            does not subscribe you automatically. You must explicitly
+            opt in and confirm your email address separately.
+          </p>
+
+          <p>If you are not interested, simply ignore this email.</p>
+
+          <p><strong>The GetOffDeals Team</strong></p>
+          <p>
+            <a href="https://getoffdeals.com">getoffdeals.com</a>
+          </p>
+        </div>
+        """,
+    }
+
+    if idempotency_key:
+        return resend.Emails.send(
+            params,
+            options={"idempotency_key": idempotency_key},
+        )
+
+    return resend.Emails.send(params)
