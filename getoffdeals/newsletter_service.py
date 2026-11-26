@@ -207,7 +207,7 @@ def unsubscribe_subscription(conn, token):
     if not row:
         return False
 
-    _execute(
+    cursor = _execute(
         conn,
         """
         UPDATE subscribers
@@ -222,6 +222,9 @@ def unsubscribe_subscription(conn, token):
         """,
         (utc_now(), row["id"]),
     )
+
+    if cursor.rowcount != 1:
+        return False
 
     enqueue_resend_sync(conn, row["email"], "unsubscribe")
     return True

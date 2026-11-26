@@ -7,6 +7,7 @@
   <meta name="theme-color" content="#101b2b">
   <title>My Account | GetOffDeals</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
+  <meta name="travel-stories-csrf-token" content="{{ csrf_token }}">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=Manrope:wght@600;700;800&display=swap" rel="stylesheet">
   <link rel="stylesheet"
@@ -16,9 +17,8 @@
   <header class="nav-wrap">
     <nav class="nav container">
       <a class="brand" href="/">
-        <span class="brand-mark">↗</span>
-        GetOffDeals <span class="brand-dot">.</span>
-      </a>
+<img src="{{ url_for('static', filename='images/getoffdeals_logo.png') }}" alt="GetOffDeals" class="brand-logo">
+</a>
 
       <div class="account-nav-links">
         <a href="/">Home</a>
@@ -197,6 +197,36 @@
         </div>
       </section>
 
+            <section class="account-section" id="travel-stories-section">
+        <div class="account-section-heading">
+          <div>
+            <span class="account-section-kicker">YOUR TRAVEL JOURNAL</span>
+            <h2>My Travel Stories</h2>
+            <p>Manage the travel experiences you've shared with the community.</p>
+          </div>
+          <span class="account-icon" aria-hidden="true">✎</span>
+        </div>
+
+        <div class="account-story-toolbar">
+          <a class="account-text-link" href="/travel-stories/create">
+            Share a story <span>→</span>
+          </a>
+          <button type="button" id="refresh-travel-stories">
+            Refresh stories
+          </button>
+        </div>
+
+        <p
+          id="travel-stories-message"
+          class="account-story-message"
+          role="status"
+          aria-live="polite"
+        >Loading your stories…</p>
+
+        <div id="account-travel-story-list" class="account-story-list">
+        </div>
+      </section>
+
       <section class="account-section">
         <div class="account-section-heading">
           <div>
@@ -234,9 +264,8 @@
   <footer class="footer">
     <div class="container footer-inner">
       <a class="brand footer-brand" href="/">
-        <span class="brand-mark">↗</span>
-        GetOffDeals <span class="brand-dot">.</span>
-      </a>
+<img src="{{ url_for('static', filename='images/getoffdeals_logo.png') }}" alt="GetOffDeals" class="brand-logo">
+</a>
       <span>Discover more. Travel for less.</span>
       <span>© GetOffDeals</span>
     </div>
@@ -388,6 +417,215 @@
       showMessage(error.message, true);
     }
   });
+})();
+</script>
+<script>
+(() => {
+  const section = document.getElementById("travel-stories-section");
+  const list = document.getElementById("account-travel-story-list");
+  const message = document.getElementById("travel-stories-message");
+  const refreshButton = document.getElementById("refresh-travel-stories");
+
+  if (!section || !list || !message || !refreshButton) return;
+
+  const csrfToken = document
+    .querySelector('meta[name="travel-stories-csrf-token"]')
+    ?.content || "";
+
+  function escapeHtml(value) {
+    return String(value ?? "").replace(/[&<>"']/g, char => ({
+      "&": "&amp;",
+      "<": "&lt;",
+      ">": "&gt;",
+      '"': "&quot;",
+      "'": "&#39;"
+    })[char]);
+  }
+
+  function showMessage(text, isError = false) {
+    message.textContent = text;
+    message.classList.toggle("is-error", isError);
+  }
+
+  async function apiRequest(url, options = {}) {
+    const response = await fetch(url, {
+      credentials: "same-origin",
+      ...options,
+      headers: {
+        ...options.headers
+      }
+    });
+
+    const data = await response.json().catch(() => ({}));
+
+    if (!response.ok) {
+      throw new Error(
+        data.error || "Unable to complete your request. Please try again."
+      );
+    }
+
+    return data;
+  }
+
+  function renderStories(stories) {
+    if (!stories.length) {
+      list.innerHTML = `
+        <div class="account-empty">
+          <span class="account-empty-icon" aria-hidden="true">✈</span>
+          <h3>Your travel journal is waiting</h3>
+          <p>
+            You haven't shared any travel stories yet.
+            Start documenting your adventures and inspire other travellers.
+          </p>
+          <a class="account-text-link" href="/travel-stories/create">
+            Create your first story <span>→</span>
+          </a>
+        </div>
+      `;
+      return;
+    }
+
+    list.innerHTML = stories.map(story => {
+      const title = escapeHtml(story.title || "Untitled story");
+      const destination = escapeHtml(story.destination || "");
+      const country = escapeHtml(story.country || "");
+      const status = escapeHtml(story.status || "Submitted");
+      const slug = encodeURIComponent(story.slug || "");
+      const storyId = escapeHtml(story.id);
+
+      const coverUrl = story.cover_image_url
+        ? escapeHtml(story.cover_image_url)
+        : "";
+
+      const location = [destination, country]
+        .filter(Boolean)
+        .join(", ");
+
+      const cover = coverUrl
+        ? `
+          <img
+            class="account-story-cover"
+            src="${coverUrl}"
+            alt="Cover photo for ${title}"
+            loading="lazy"
+          >
+        `
+        : `
+          <div class="account-story-cover-placeholder">
+            <span aria-hidden="true">✈</span>
+            <span>No cover photo</span>
+          </div>
+        `;
+
+      return `
+        <article class="account-story-card">
+          ${cover}
+
+          <div class="account-story-copy">
+            <span class="account-story-status">
+              ${status}
+            </span>
+
+            <h3>${title}</h3>
+
+            ${location ? `<p>${location}</p>` : ""}
+          </div>
+
+          <div class="account-story-actions">
+            ${story.slug ? `
+              <a
+                class="account-story-view"
+                href="/travel-stories/${slug}"
+              >
+                View story
+              </a>
+            ` : ""}
+
+            <button
+              type="button"
+              class="account-story-delete"
+              data-story-id="${storyId}"
+              data-story-title="${title}"
+            >
+              Delete
+            </button>
+          </div>
+        </article>
+      `;
+    }).join("");
+  }
+
+  async function refreshStories() {
+    refreshButton.disabled = true;
+    showMessage("Loading your stories…");
+
+    try {
+      const data = await apiRequest("/api/my-travel-stories");
+      const stories = Array.isArray(data.stories) ? data.stories : [];
+
+      renderStories(stories);
+
+      showMessage(
+        stories.length
+          ? `${stories.length} ${stories.length === 1 ? "story" : "stories"} found.`
+          : "Your stories are up to date."
+      );
+    } catch (error) {
+      list.innerHTML = "";
+      showMessage(error.message, true);
+    } finally {
+      refreshButton.disabled = false;
+    }
+  }
+
+  refreshButton.addEventListener("click", refreshStories);
+
+  list.addEventListener("click", async event => {
+    const deleteButton = event.target.closest(".account-story-delete");
+
+    if (!deleteButton || deleteButton.disabled) return;
+
+    const storyId = deleteButton.dataset.storyId;
+    const storyTitle = deleteButton.dataset.storyTitle;
+
+    if (!window.confirm(
+      `Permanently delete "${storyTitle}" and its photos? This cannot be undone.`
+    )) {
+      return;
+    }
+
+    if (!csrfToken) {
+      showMessage(
+        "Security token missing. Please refresh the page and try again.",
+        true
+      );
+      return;
+    }
+
+    deleteButton.disabled = true;
+    showMessage("Deleting your story…");
+
+    try {
+      await apiRequest(
+        `/api/travel-stories/${encodeURIComponent(storyId)}`,
+        {
+          method: "DELETE",
+          headers: {
+            "X-CSRF-Token": csrfToken
+          }
+        }
+      );
+
+      showMessage("Your story was deleted successfully.");
+      await refreshStories();
+
+    } catch (error) {
+      showMessage(error.message, true);
+      deleteButton.disabled = false;
+    }
+  });
+
+  refreshStories();
 })();
 </script>
 </body>

@@ -1,0 +1,44 @@
+name: GetOffDeals Welcome Email Worker
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: "*/10 * * * *"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: getoffdeals-welcome-email
+  cancel-in-progress: false
+
+jobs:
+  send-welcome-emails:
+    name: Process welcome email queue
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    env:
+      DATABASE_URL: ${{ secrets.DATABASE_URL }}
+      RESEND_API_KEY: ${{ secrets.RESEND_API_KEY }}
+      EMAIL_FROM: ${{ secrets.EMAIL_FROM }}
+      FLASK_SECRET_KEY: ${{ secrets.FLASK_SECRET_KEY }}
+      PUBLIC_BASE_URL: https://getoffdeals.com
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+          cache: pip
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+
+      - name: Run welcome email worker
+        run: python -m getoffdeals.welcome_email_worker

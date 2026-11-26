@@ -7,3 +7,24 @@ takeoff.sqlite3-shm
 takeoff.sqlite3-wal
 .pytest_cache/
 .DS_Store
+
+# Local travel story photo uploads
+instance/travel-stories/
+# Environment files and local secrets
+.env*
+!.env.example
+
+# Local databases and SQLite backups
+*.sqlite3
+*.sqlite3-*
+*.db
+*.db-*
+
+# Temporary and backup files
+*.bak
+*.backup
+*.backup-*
+*.backup.*
+
+# Backup filenames using -backup-
+*-backup*

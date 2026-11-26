@@ -27,6 +27,8 @@ from getoffdeals.postgres_sessions import (
 )
 from getoffdeals.price_alerts import price_alerts_bp
 
+from getoffdeals.travel_stories.routes import travel_stories_bp
+
 from getoffdeals.unsubscribe_routes import unsubscribe_bp
 
 from getoffdeals.email_service import send_newsletter_confirmation
@@ -37,26 +39,54 @@ from getoffdeals.newsletter_service import (
     unsubscribe_subscription,
 )
 
+from getoffdeals.newsletter_invitation_service import (
+    consume_invitation,
+    get_invitation_email,
+    restore_invitation,
+)
+
+from getoffdeals.travel_stories.validators import generate_csrf_token
+
 load_dotenv()
 
 app = Flask(__name__)
+
+# Travel Stories image upload limits.
+app.config["TRAVEL_STORIES_MAX_IMAGE_BYTES"] = 5 * 1024 * 1024
+app.config["TRAVEL_STORIES_MAX_GALLERY_IMAGES"] = 10
+app.config["MAX_CONTENT_LENGTH"] = 56 * 1024 * 1024
+
 app.register_blueprint(price_alerts_bp)
 app.register_blueprint(unsubscribe_bp)
+app.register_blueprint(travel_stories_bp)
 app.config["JSON_SORT_KEYS"] = False
 
 from getoffdeals.admin_contacts import admin_contacts_bp
 app.register_blueprint(admin_contacts_bp, url_prefix="/admin")
 
+
 def sync_authenticated_user(user_id, email, first_name="", last_name=""):
-    """Synchronize a Supabase Auth user into public.users."""
+    """Synchronize a verified Supabase user and queue one welcome email."""
     try:
         normalized_id = str(UUID(str(user_id)))
     except (ValueError, TypeError, AttributeError) as exc:
-        raise ValueError("Authenticated user ID must be a valid UUID.") from exc
+        raise ValueError(
+            "Authenticated user ID must be a valid UUID."
+        ) from exc
 
     if not isinstance(email, str) or not email.strip():
         raise ValueError("Authenticated user email is required.")
 
+    normalized_email = email.strip().lower()
+
+    normalized_first_name = (
+        first_name.strip() if isinstance(first_name, str) else ""
+    )
+    normalized_last_name = (
+        last_name.strip() if isinstance(last_name, str) else ""
+    )
+
+    # Both operations share one PostgreSQL transaction.
     with get_connection() as conn:
         with conn.cursor() as cur:
             cur.execute(
@@ -74,9 +104,34 @@ def sync_authenticated_user(user_id, email, first_name="", last_name=""):
                 """,
                 (
                     normalized_id,
-                    email.strip().lower(),
-                    first_name.strip() if isinstance(first_name, str) else "",
-                    last_name.strip() if isinstance(last_name, str) else "",
+                    normalized_email,
+                    normalized_first_name,
+                    normalized_last_name,
+                ),
+            )
+
+            cur.execute(
+                """
+                INSERT INTO public.welcome_email_outbox (
+                    user_id,
+                    email,
+                    first_name,
+                    status,
+                    attempts,
+                    next_attempt_at,
+                    created_at,
+                    updated_at
+                )
+                VALUES (
+                    %s, %s, %s, 'pending', 0,
+                    NOW(), NOW(), NOW()
+                )
+                ON CONFLICT (user_id) DO NOTHING
+                """,
+                (
+                    normalized_id,
+                    normalized_email,
+                    normalized_first_name,
                 ),
             )
 
@@ -339,7 +394,6 @@ def fetch_travelpayouts_deals():
     return deals
 
 
-
 def supabase_auth_config():
     """Return validated Supabase Auth configuration and request headers."""
     from urllib.parse import urlparse
@@ -405,8 +459,17 @@ def supabase_auth_request(
         data = {}
 
     if not response.ok:
+        app.logger.warning(
+            "Supabase Auth diagnostic: HTTP status=%s",
+            response.status_code,
+        )
+
         if response.status_code in (400, 401, 422):
-            return None, "Unable to authenticate. Check your details or verify your email."
+            return None, (
+                "Unable to authenticate. "
+                "Check your details or verify your email."
+            )
+
         return None, "Supabase Auth could not complete the request."
 
     if not isinstance(data, dict):
@@ -1002,6 +1065,7 @@ def account_page():
         first_name=session.get("first_name", "").strip(),
         email=session.get("email", ""),
         alerts=alerts,
+        csrf_token=generate_csrf_token(session),
     )
 
 
@@ -1718,7 +1782,6 @@ def newsletter_join(token):
 
             if not public_base_url.startswith("https://"):
                 app.logger.error("PUBLIC_BASE_URL must use HTTPS")
-
                 try:
                     with newsletter_db_connect() as conn:
                         restored = restore_invitation(conn, token)
